@@ -1,0 +1,14 @@
+.pdb_features {
+  border:1px solid #CCC;
+} 
+.pdb_features > thead > tr > th {
+  padding:2px 4px;
+}
+.pdb_features td:first-child {
+  padding-left:2px;
+  font-weight:bold;
+  text-align:left;
+  border-left: 5px solid;
+}
+.pdb_features td:not(:first-child) {
+  text-align:right;
