@@ -93,10 +93,9 @@ sub content {
     <div style="clear:both"></div>
   </div>
   
-  <!--<div id="variant_pos_info" style="margin:-5px 0px 10px;display:none">
-    <span>Variant position on protein <span id="var_ensp_id"></span>: </span>
-    <span class="var_pos" style="font-weight:bold"></span>
-  </div>-->
+  <div id="variant_pos_info" style="display:none">
+    <span id="var_ensp_id"></span><span class="var_pos"></span>
+  </div>
 
   <div style="margin-bottom:300px">
 
@@ -105,37 +104,28 @@ sub content {
     </div>
 
     <div id="litemol_buttons" style="float:left;margin-left:20px;display:none">
-      <!--<div style="padding-bottom:15px">
-        <button class="btn btn-sm btn-primary" onclick="callShowControls()">Show controls</button>
-        <button class="btn btn-sm btn-primary" onclick="callHideControls()">Hide controls</button>
-        <button class="btn btn-sm btn-primary" onclick="callExpand()">Expand</button>
-      </div>-->
-      
       <table id="pdb_markup" class="ss">
       <thead>
-        <tr>
-          <th></th>
-          <th>Data type</th>
-        </tr>
+        <tr><th>Data type</th></tr>
       </thead>
       <tbody>
 
         <tr>
           <td>
-            <input class="pdb_feature_entry" id="mapping_cb" value="" data-name="Mapping" data-colour="#C8C8C8" type="checkbox"/>
-          </td>
-          <td>
             <div>
-              <div style="float:left">ENSP-PDB mapping coverage</div>
+              <div class="cb">
+                <input class="pdb_feature_group" id="mapping_group" type="checkbox"/>
+              </div>
+              <div style="float:left;vertical-align:middle">ENSP-PDB mapping coverage</div>
               <div style="float:right"><a rel="mapping_details" href="#" class="toggle_link toggle _slide_toggle set_cookie open"></a></div>
               <div style="clear:both"></div>
             </div>
             <div class="mapping_details">
-              <div id="mapping_details_div" class="toggleable" style="padding-top:5px">
+              <div id="mapping_details_div" class="pdb_features_container toggleable" style="padding-top:5px">
                 <table class="pdb_features">
                   <thead><tr><th>Label</th><th>PDB coords</th><th>ENSP coords</th></tr></thead>
                   <tbody>
-                    <tr><td style="border-color:#C8C8C8">Coverage</td><td id="mapping_pdb_pos"></td><td id="mapping_ensp_pos"></td></tr>
+                    <tr><td style="border-color:#C8C8C8"><input class="pdb_feature_entry" id="mapping_cb" value="" data-group="mapping_group" data-name="Mapping" data-colour="#C8C8C8" type="checkbox"/> Coverage</td><td id="mapping_pdb_pos"></td><td id="mapping_ensp_pos"></td></tr>
                   </tbody>
                 </table>
               </div>
@@ -145,20 +135,20 @@ sub content {
 
         <tr>
           <td>
-            <input class="pdb_feature_entry pdb_var_entry" id="$var_label" value="" data-name="$var_id" data-colour="red" type="checkbox"/>
-          </td>
-          <td>
             <div>
-              <div style="float:left">Variant ($var_id)</div>
+              <div class="cb">
+                <input class="pdb_feature_group" id="variant_group" type="checkbox"/>
+              </div>
+              <div style="float:left;vertical-align:middle">Variant ($var_id)</div>
               <div style="float:right"><a rel="var_details" href="#" class="toggle_link toggle _slide_toggle set_cookie open"></a></div>
               <div style="clear:both"></div>
             </div>
             <div class="var_details">
-              <div id="var_details_div" class="toggleable" style="padding-top:5px">
+              <div id="var_details_div" class="pdb_features_container toggleable" style="padding-top:5px">
                 <table class="pdb_features">
                   <thead><tr><th>ID</th><th>PDB coords</th><th>ENSP coords</th></tr></thead>
                   <tbody>
-                    <tr><td style="border-color:red">$var_id</td><td id="var_pos_pdb"></td><td id="var_pos_ensp"></td></tr>
+                    <tr><td style="border-color:red"><input class="pdb_feature_entry pdb_var_entry" id="$var_label" value="" data-group="variant_group"  data-name="$var_id" data-colour="red" data-highlight="1" type="checkbox"/> $var_id</td><td id="var_pos_pdb"></td><td id="var_pos_ensp"></td></tr>
                   </tbody>
                 </table>
               </div>
@@ -168,16 +158,16 @@ sub content {
 
         <tr>
           <td>
-            <input class="pdb_feature_entry" id="exon_cb" value="" data-name="" data-colour="" type="checkbox"/>
-          </td>
-          <td>
             <div>
-              <div style="float:left">Exons (<span id="exon_count"></span>) </div>
+              <div class="cb">
+                <input class="pdb_feature_group" id="exon_group" type="checkbox"/>
+              </div>            
+              <div style="float:left;vertical-align:middle">Exons (<span id="exon_count"></span>) </div>
               <div style="float:right"><a rel="exon_details" href="#" class="toggle_link toggle _slide_toggle set_cookie open"></a></div>
               <div style="clear:both"></div>
             </div>
             <div class="exon_details">
-              <div id="exon_details_div" class="toggleable" style="padding-top:5px"></div>
+              <div id="exon_details_div" class="pdb_features_container toggleable" style="padding-top:5px"></div>
             </div>
           </td>
         </tr>
