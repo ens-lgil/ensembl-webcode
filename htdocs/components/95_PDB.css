@@ -24,6 +24,10 @@
 #pdb_markup > tbody > tr > td > div {
   line-height:18px;
 }
+#pdb_markup a:hover {
+  cursor:pointer;
+}
+
 div.cb {
   float:left;
   margin-right:8px;

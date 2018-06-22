@@ -108,26 +108,10 @@ sub content {
                 <table class="pdb_features">
                   <thead><tr><th>Label</th><th>PDB coords</th><th>ENSP coords</th></tr></thead>
                   <tbody>
-                    <tr><td style="border-color:#C8C8C8"><input class="pdb_feature_entry" id="mapping_cb" value="" data-group="mapping_group" data-name="Mapping" data-colour="#C8C8C8" type="checkbox"/> Coverage</td><td id="mapping_pdb_pos"></td><td id="mapping_ensp_pos"></td></tr>
+                    <tr><td style="border-color:#DDD"><input class="pdb_feature_entry" id="mapping_cb" value="" data-group="mapping_group" data-name="Mapping" data-colour="#DDD" type="checkbox"/> Coverage</td><td id="mapping_pdb_pos"></td><td id="mapping_ensp_pos"></td></tr>
                   </tbody>
                 </table>
               </div>
-            </div>
-          </td>
-        </tr>
- 
-        <tr>
-          <td>
-            <div>
-              <div class="cb">
-                <input class="pdb_feature_group" id="exon_group" type="checkbox"/>
-              </div>
-              <div style="float:left;vertical-align:middle">Exons (<span id="exon_count"></span>) </div>
-              <div style="float:right"><a rel="exon_details" href="#" class="toggle_link toggle _slide_toggle set_cookie open"></a></div>
-              <div style="clear:both"></div>
-            </div>
-            <div class="exon_details">
-              <div id="exon_details_div" class="pdb_features_container toggleable" style="padding-top:5px"></div>
             </div>
           </td>
         </tr>

@@ -40,7 +40,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
                          'light_grey' : {r:200, g:200, b:200},
                          'dark_grey'  : {r:100, g:100, b:100},
                          'darkred'    : {r:55,  g:0,   b:0},
-                         '#C8C8C8'    : {r:200, g:200, b:200}
+                         '#DDD'       : {r:221, g:221, b:221}
                        };
 
     this.liteMolScope;
@@ -121,7 +121,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
       $(document).on('click', 'a.toggle', function() {
         var div_id = '#'+$(this).attr('rel')+'_div';
         if ($(this).hasClass('closed')) {
-          //$(div_id).show();
+          $(div_id).show();
           $(this).switchClass('closed','open');
         }
         else {
@@ -211,14 +211,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
 
       // Display the LiteMol canvas
       panel.load3DWidget();
-
-      // When the PDB model has been loaded, highlight the options selected by default
-      /*$( document ).ajaxStop(function() {
-console.log("AJAX STOPPED - before");
-        panel.selectedFeaturesToHighlight();
-console.log("AJAX STOPPED - after");
-      });*/
-
+   
       $('#litemol_buttons').show();
 
       if (panel.ensp_id) {
@@ -258,11 +251,30 @@ console.log("AJAX STOPPED - after");
     panel.liteMolScope = bindPdbComponentScope($('#'+pdb_litemol_id));
 
     $.getScript('/pdbe/litemol-custom-theme.js').done(function() {
-//console.log(">> HL features - before | "+panel.liteMolScope.LiteMolComponent);
-      panel.selectedFeatureGroupsToHighlight();
-//console.log(">> HL features - after");
-//console.log("Plugin: "+panel.liteMolScope.LiteMolComponent.plugin.context.select('model')[0]);
+
+      // Set interval to check that the model loading is done before highlighting some features by default
+      var max_interval_iteration = 30;
+      var interval_iteration_count = 0;
+      var checkExist = setInterval(function() {
+        if (panel.liteMolScope.LiteMolComponent.plugin.context.select('model')[0] != undefined || interval_iteration_count == max_interval_iteration) {
+          if (interval_iteration_count == max_interval_iteration) {
+            console.log("Model loading take too long!");
+          }
+          else {
+            console.log("Model loading done! => "+interval_iteration_count);
+          }
+          clearInterval(checkExist);
+          checkExist = 0;
+          var timeout = (panel.var_id) ? 0 : 200;
+          setTimeout(function(){ panel.selectedFeatureGroupsToHighlight(); }, timeout);
+//          panel.selectedFeatureGroupsToHighlight();
+        }
+        interval_iteration_count ++;
+      }, 100);
+
+console.log(">>>> HL features - loading theme | "+panel.liteMolScope.LiteMolComponent.plugin.context.select('model'));
     });
+
   },
  
   // Function to remove any existing component instance
@@ -281,7 +293,7 @@ console.log("AJAX STOPPED - after");
       var gp_id = $(this).attr('id');
 
       var is_checked = $('#'+gp_id).is(':checked');
-
+console.log("GROUP ID: "+gp_id+" => "+is_checked);
       var pdb_feature_entry_array = $('[data-group="'+gp_id+'"]');
 
       pdb_feature_entry_array.each(function(index, el) {
@@ -363,8 +375,10 @@ console.log("NO model: "+panel.liteMolScope.LiteMolComponent.plugin.context.sele
         featureGroups[group_id] = 1;
       }
 
+      var special_hl = el.getAttribute('data-highlight');
+
       // Check if entry is checked
-      if (el.checked) {  
+      if (el.checked || special_hl) {  
         var data_colours = el.getAttribute('data-colour');
         var var_colours  = data_colours.split(';');
 
@@ -412,12 +426,13 @@ console.log(">> FEATURE "+el.id+" | "+data_colours+" | "+input_value);
                                        struct_asym_id : struct_asym,
                                        start_residue_number : start_residue, 
                                        end_residue_number : end_residue,
-                                       color: panel.hexa_to_rgb[var_colour]
+                                       color: panel.hexa_to_rgb[var_colour],
+                                       checked: el.checked
                                      };
-              residueDetails.push(selectionDetails);
-
+              if (el.checked) {
+                residueDetails.push(selectionDetails);
+              }
               // Special highlighting with side chaine
-              var special_hl = el.getAttribute('data-highlight');
               if (typeof special_hl !== typeof undefined && special_hl !== false && special_hl !== null) {
                 var hl_list = special_hl.split(';');
                 if (hl_list[index] == 1) {
@@ -448,15 +463,17 @@ console.log(">> FEATURE "+el.id+" | "+data_colours+" | "+input_value);
     if (specialResidueDetails.length > 0) {
       var action = panel.liteMolScope.LiteMolComponent.Transform.build();
  
-     for(var si=0, sl=specialResidueDetails.length; si<sl; si++ ){
+      for(var si=0, sl=specialResidueDetails.length; si<sl; si++ ){
         var query = panel.liteMolScope.LiteMolComponent.Query.sequence(
                         specialResidueDetails[si].entity_id.toString(),
                         specialResidueDetails[si].struct_asym_id.toString(),
                         { seqNumber: specialResidueDetails[si].start_residue_number }, 
                         { seqNumber: specialResidueDetails[si].end_residue_number }
                     );
-        action.add(model, panel.liteMolScope.LiteMolComponent.Transformer.Molecule.CreateSelectionFromQuery, { query: query, name: 'Selection-'+si }, { ref: 'sequence-selection-'+si })
-        .then(panel.liteMolScope.LiteMolComponent.Transformer.Molecule.CreateVisual, { style: panel.liteMolScope.LiteMolComponent.Visualization.Molecule.Default.ForType.get('BallsAndSticks') });
+        if (specialResidueDetails[si].checked) {
+          action.add(model, panel.liteMolScope.LiteMolComponent.Transformer.Molecule.CreateSelectionFromQuery, { query: query, name: 'Selection-'+si }, { ref: 'sequence-selection-'+si })
+          .then(panel.liteMolScope.LiteMolComponent.Transformer.Molecule.CreateVisual, { style: panel.liteMolScope.LiteMolComponent.Visualization.Molecule.Default.ForType.get('BallsAndSticks') }); //BallsAndSticks | Surface
+        }
       }
    
       panel.liteMolScope.LiteMolComponent.applyTransforms(action).then(function(){
@@ -998,8 +1015,10 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
      
         exon_count ++;
       });
-      $('#exon_count').html(exon_count);
-      $("#exon_details_div").html('<table class="pdb_features"><thead><tr>'+panel.details_header+'</tr></thead><tbody>'+exon_details+'</tbody></table>');
+
+      var label = (exon_count > 1) ? 'Exons' : 'Exon';
+
+      panel.render_selection_details('exon', label, exon_count, exon_details);
     }
   },
 
@@ -1213,17 +1232,6 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
 
     if (type_count) {
 
-      /*var checkbox;
-      if ($('#'+td_sel).length) {
-        checkbox = $('#'+td_sel);
-      }
-      else {
-        checkbox = $('<td></td>');
-        checkbox.attr('id', td_sel);
-        //checkbox.css('border-right','5px solid #000');
-      }
-      checkbox.html('<input class="pdb_feature_entry" id="'+cb_sel+'" value="'+coords+'" data-name="" data-colour="'+colours.join(";")+'" type="checkbox"/>');*/
-
       var label;
       if ($('#'+td_label).length) {
         label = $('#'+td_label);
@@ -1245,7 +1253,7 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
         '  <div id="'+label_id_div+'" class="pdb_features_container toggleable" style="padding-top:5px;display:none">'+legend+
         '    <table class="pdb_features"><thead><tr>'+panel.details_header+extra_col+'</tr></thead><tbody>'+details+'</tbody></table>'+
         '  </div>'+
-        '<div>');
+        '</div>');
 
       if (!$('#'+row_id).length) {
         var row = $('<tr></tr>');
