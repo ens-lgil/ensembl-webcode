@@ -321,15 +321,14 @@ console.log("GROUP ID: "+gp_id+" => "+is_checked);
       entries: []
     };
     
-/*    var model_default = panel.liteMolScope.LiteMolComponent.plugin.context.select('model')[0];
+    var model_default = panel.liteMolScope.LiteMolComponent.plugin.context.select('model')[0];
     if (!model_default) {
-console.log("NO model: "+panel.liteMolScope.LiteMolComponent.plugin.context.select('model'));
       return;
     }
     var theme_default = LiteMolPluginInstance.CustomTheme.createTheme(model_default.props.model, coloring_default);
   
     // instead of "polymer-visual", "model" or any valid ref can be used: all "child" visuals will be colored.
-    LiteMolPluginInstance.CustomTheme.applyTheme(this.liteMolScope.LiteMolComponent.plugin, 'polymer-visual', theme_default);*/
+    LiteMolPluginInstance.CustomTheme.applyTheme(this.liteMolScope.LiteMolComponent.plugin, 'polymer-visual', theme_default);
 
     // List the PDB struct_asyms mapped to the ENSP
     var pdb_chain_ids = ['A'];
@@ -1124,6 +1123,13 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
 
         var sift_coords = var_pdb_start+','+var_pdb_end;
 
+        var sift_residues = result.residues;
+
+        if (sift_residues.length > 5) {
+          var sift_residues_label = sift_residues.substr(0,2)+'...';
+          sift_residues = '<span class="ht" title="'+sift_residues+'">'+sift_residues_label+'</span>';
+        }       
+
         // Colour
         var sift_class  = 'score_good';
         var sift_colour = 'green';
@@ -1132,11 +1138,12 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
           sift_colour = 'red';
         }
 
-        sift_details += '<tr><td>'+
+        sift_details += '<tr><td style="border-color:'+sift_colour+'">'+
           '<input class="pdb_feature_entry" id="sift_'+result.id+'_cb" value="'+sift_coords+'"'+
           ' data-group="sift_group" data-name="'+result.id+'" data-colour="'+sift_colour+'" '+
           'type="checkbox"/> '+
-          result.id+'</td><td>'+var_pdb+'</td><td>'+var_ensp+'</td><td><div class="score '+sift_class+'">'+sift_score+'</div></td></tr>';
+          result.id+'</td><td>'+var_pdb+'</td><td>'+var_ensp+'</td>'+
+          '<td>'+sift_residues+'</td><td><div class="score '+sift_class+'">'+sift_score+'</div></td></tr>';
         
         sift_count++;
       }
@@ -1149,7 +1156,7 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
                  '  <div style="clear:both"></div>'+
                  '</div>';
 
-    panel.render_selection_details('sift', 'SIFT', sift_count, sift_details, 'Score', legend);
+    panel.render_selection_details('sift', 'SIFT', sift_count, sift_details, 'Residues;Score', legend);
   },
   parse_polyphen_results: function(data) {
     var panel = this;
@@ -1178,6 +1185,12 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
 
         var polyphen_coords = var_pdb_start+','+var_pdb_end;
 
+        var polyphen_residues = result.residues;
+        if (polyphen_residues.length > 5) {
+          var polyphen_residues_label = polyphen_residues.substr(0,2)+'...';
+          polyphen_residues = '<span class="ht" title="'+polyphen_residues+'">'+polyphen_residues_label+'</span>';
+        }
+
         // Colour
         var polyphen_class  = 'score_neutral';
         var polyphen_colour = 'blue'; 
@@ -1194,11 +1207,12 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
           polyphen_colour = 'green';
         }
 
-        polyphen_details += '<tr><td>'+
+        polyphen_details += '<tr><td style="border-color:'+polyphen_colour+'">'+
           '<input class="pdb_feature_entry" id="polyphen_'+result.id+'_cb" value="'+polyphen_coords+'"'+
           ' data-group="polyphen_group" data-name="'+result.id+'" data-colour="'+polyphen_colour+'" '+
           'type="checkbox"/> '+
-          result.id+'</td><td>'+var_pdb+'</td><td>'+var_ensp+'</td><td><div class="score '+polyphen_class+'">'+polyphen_score+'</div></td></tr>';
+          result.id+'</td><td>'+var_pdb+'</td><td>'+var_ensp+'</td>'+
+          '<td>'+polyphen_residues+'</td><td><div class="score '+polyphen_class+'">'+polyphen_score+'</div></td></tr>';
         
         polyphen_count++;
       }
@@ -1213,7 +1227,7 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
                  '  <div style="clear:both"></div>'+
                  '</div>';
 
-    panel.render_selection_details('polyphen', 'PolyPhen', polyphen_count, polyphen_details, 'Score', legend);
+    panel.render_selection_details('polyphen', 'PolyPhen', polyphen_count, polyphen_details, 'Residues;Score', legend);
   },
 
   render_selection_details: function (type,type_label,type_count,details,extra_col,legend) {
@@ -1226,7 +1240,8 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     var label_id     = type+'_details';
     var label_id_div = label_id+'_div';
 
-    extra_col = (extra_col) ? '<th>'+extra_col+'</th>' : '';
+    
+    extra_col = (extra_col) ? '<th>'+extra_col.replace(';','</th><th>')+'</th>' : '';
 
     legend = (legend) ? legend : '';
 
