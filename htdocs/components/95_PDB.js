@@ -73,6 +73,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
       });*/
     panel.addSpinner();
 
+
     $(document).ready(function () {
       console.log('doc ready');
       
@@ -81,7 +82,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
       // Transcript portal
       if ($("#ensp_id").length) {
         panel.ensp_id = $("#ensp_id").html();
-        panel.get_prot_length(panel.ensp_id);
+        panel.get_ens_protein_length(panel.ensp_id);
         panel.get_pdb_list(panel.ensp_id,1);
       }
       // Variation portal
@@ -104,69 +105,65 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
         });
       }  
 
+      // Select a PDBe model
       $('#pdb_list').change(function () {
         var pdb_id = $(this).val();
         panel.selectPDBEntry(pdb_id);
 //console.log("LiteMol DATA: "+panel.liteMolScope.LiteMolComponent.plugin.context.select('model')[0]);
       });
 
+      // Select a group of features to highlight
       $(document).on('click', '.pdb_feature_group', function() {
+        $(this).toggleClass('view_enabled view_disabled');
+/*        if ($(this).hasClass('view_enabled')) {
+          $(this).switchClass('view_enabled','view_disabled');
+        }
+        else {
+          $(this).switchClass('view_disabled','view_enabled');
+        }*/
         panel.selectedFeatureGroupsToHighlight($(this).attr('id'));
       });
-
+      
+      // Select a feature (or a list of features) to highlight
       $(document).on('click', '.pdb_feature_entry', function() {
+        $(this).toggleClass('view_enabled view_disabled');
+/*        if ($(this).hasClass('view_enabled')) {
+          $(this).switchClass('view_enabled','view_disabled');
+        }
+        else {
+          $(this).switchClass('view_disabled','view_enabled');
+        }*/
         panel.selectedFeaturesToHighlight();
       });
       
-      $(document).on('click', 'a.toggle', function() {
+      // Expans/collapse a list of features
+      $(document).on('click', '.view_toggle', function() {
         var div_id = '#'+$(this).attr('rel')+'_div';
         if ($(this).hasClass('closed')) {
           $(div_id).show();
-          $(this).switchClass('closed','open');
+          //$(this).switchClass('closed','open');
         }
         else {
           $(div_id).hide();
-          $(this).switchClass('open','closed');
+          //$(this).switchClass('open','closed');
         }
+        $(this).toggleClass('open closed');
       });
 
     });
   },
 
-  /*default_display: function() {
-    var panel = this;
-
-    var model_default = panel.liteMolScope.LiteMolComponent.plugin.context.select('model')[0];
-
-    if (!model_default && typeof model_default !== "undefined"){
-      var coloring_default = {
-        //base: panel.hexa_to_rgb['dark_grey'],
-        base: panel.hexa_to_rgb['red'],
-        entries: []
-      };
-//      var model_default = panel.liteMolScope.LiteMolComponent.plugin.context.select('model')[0];
-      if (!model_default) {
-        console.log('No LiteMol model available yet');
-        return;
-      }
-      var theme_default = LiteMolPluginInstance.CustomTheme.createTheme(model_default.props.model, coloring_default);
-      LiteMolPluginInstance.CustomTheme.applyTheme(panel.liteMolScope.LiteMolComponent.plugin, 'polymer-visual', theme);
-    }
-    else {
-      setTimeout(panel.default_display, 250);
-    }
-  },*/
  
   selectPDBEntry: function(pdb_id) {
     var panel = this;
 
-    $('.pdb_feature_entry').prop('checked',false);
+    $('.pdb_feature_entry').switchClass('view_enabled','view_disabled');
 
     // Check default options
-    $('#mapping_group').prop('checked',true);
+    $('#mapping_group').switchClass('view_disabled','view_enabled');
     //document.getElementById("mapping_cb").checked = true;
     if (panel.var_id) {
-      $('#variant_group').prop('checked',true);
+      $('#variant_group').switchClass('view_disabled','view_enabled');
     }
 
     if (pdb_id && pdb_id != '-') {
@@ -183,15 +180,15 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
         var var_pos_ensp = panel.ensp_var_pos[panel.ensp_id].split('-');
         var var_pdb_coords = panel.ensp_to_pdb_coords(var_pos_ensp[0],var_pos_ensp[1]);
 
-        $('#'+panel.var_id+'_cb').attr('value', var_pdb_coords[0]+','+var_pdb_coords[1]);
+        $('#'+panel.var_id+'_cb').attr('data-value', var_pdb_coords[0]+','+var_pdb_coords[1]);
 
         // Special display for the stop_gained variants
         if (panel.var_cons && (panel.var_cons == 'stop_gained' || panel.var_cons == 'frameshift_variant')) {
           var var_pos_after_stop =  Number(var_pos_ensp[1]) + 1;
 
-          var altered_sequence = '<tr><td style="border-color:darkred">'+
-            '<input class="pdb_feature_entry" id="'+panel.var_id+'_alt_cb" value="'+var_pos_after_stop+','+panel.pdb_end+'" data-group="variant_group" data-name="'+panel.var_id+'_alt" data-colour="darkred" type="checkbox"/>Altered/missing sequence</td>'+
-            '<td>from '+var_pdb_coords[0]+'</td><td>from '+var_pos_ensp[1]+'</td></tr>';
+          var altered_sequence = '<tr><td style="border-color:darkred">Altered/missing sequence</td>'+
+            '<td>from '+var_pdb_coords[0]+'</td><td>from '+var_pos_ensp[1]+'</td>'+
+            '<td><span class="pdb_feature_entry float_left view_enabled" id="'+panel.var_id+'_alt_cb" data-value="'+var_pos_after_stop+','+panel.pdb_end+'" data-group="variant_group" data-na     me="'+panel.var_id+'_alt" data-colour="darkred"></span></td></tr>';
         
           $('#var_details_div > table > tbody').append(altered_sequence);
         }
@@ -204,7 +201,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
 
       // Assign position to ENSP mapping
       var ensp_pdb_coords = panel.ensp_to_pdb_coords(panel.pdb_start, panel.pdb_end);
-      $('#mapping_cb').attr('value', ensp_pdb_coords[0]+','+ensp_pdb_coords[1]);
+      $('#mapping_cb').attr('data-value', ensp_pdb_coords[0]+','+ensp_pdb_coords[1]);
 
       $('#mapping_ensp_pos').html(panel.pdb_start+'-'+panel.pdb_end);
       $('#mapping_pdb_pos').html(ensp_pdb_coords[0]+'-'+ensp_pdb_coords[1]);
@@ -214,6 +211,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
    
       $('#litemol_buttons').show();
 
+      // Load the right hand side menu
       if (panel.ensp_id) {
         panel.get_exon_data(panel.ensp_id); // Might need to move it into the #ensp_list change block
         panel.get_protein_feature_data(panel.ensp_id,'Pfam');
@@ -271,8 +269,6 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
         }
         interval_iteration_count ++;
       }, 100);
-
-console.log(">>>> HL features - loading theme | "+panel.liteMolScope.LiteMolComponent.plugin.context.select('model'));
     });
 
   },
@@ -289,15 +285,22 @@ console.log(">>>> HL features - loading theme | "+panel.liteMolScope.LiteMolComp
     if (!id) {
       id = '_group';
     } 
-    $('input[id$='+id+']').each(function() {
+    $('div[id$='+id+']').each(function() {
       var gp_id = $(this).attr('id');
 
-      var is_checked = $('#'+gp_id).is(':checked');
-console.log("GROUP ID: "+gp_id+" => "+is_checked);
+      //var is_checked = $('#'+gp_id).is(':checked');
+      var is_selected = $('#'+gp_id).hasClass('view_enabled');
+//console.log("GROUP ID: "+gp_id+" => "+is_checked);
+console.log("GROUP ID: "+gp_id+" => "+is_selected);
       var pdb_feature_entry_array = $('[data-group="'+gp_id+'"]');
 
-      pdb_feature_entry_array.each(function(index, el) {
-        el.checked = is_checked;
+      pdb_feature_entry_array.each(function() {
+        if (is_selected) {
+          $(this).switchClass('view_disabled','view_enabled');
+        }
+        else {
+          $(this).switchClass('view_enabled','view_disabled');
+        }
       });
     });
 
@@ -306,9 +309,9 @@ console.log("GROUP ID: "+gp_id+" => "+is_checked);
   
   selectedFeaturesToHighlight: function() {
     var panel = this;
-    var residueDetails = [];
-    var specialResidueDetails = [];
-    var featureGroups = {};
+    //var residueDetails = [];
+    //var specialResidueDetails = [];
+    //var featureGroups = {};
     
 
     if (!panel.liteMolScope) {
@@ -350,100 +353,12 @@ console.log("GROUP ID: "+gp_id+" => "+is_checked);
       pdb_feature_entry_array.push(pdb_var_entry[0]);
     }
 
+    // Loop over the right hand menu to see what has been selected in order to highlight it
+    var residueToHighlight = panel.features2LiteMol(pdb_feature_entry_array, pdb_chain_ids);
+    var residueDetails = residueToHighlight[0];
+    var specialResidueDetails = residueToHighlight[1];
 
-    // Loop over the right hand menu to see what has been selected in order to highlight it    
-    pdb_feature_entry_array.each(function(index, el) {
-
-      // Check whether all the group entries have been checked or not
-      // Then it check or uncheck the "Group" checkbox
-      var group_id = el.getAttribute('data-group');
-      if (!featureGroups[group_id]) {
-        var pdb_feature_entry_array = $('[data-group="'+group_id+'"]');
-        var count_checked = 0;
-        pdb_feature_entry_array.each(function(index, el) {
-          if (el.checked) {
-            count_checked++;
-          }
-        });
-        if (count_checked == pdb_feature_entry_array.length) {
-          $('#'+group_id).prop("checked", true);
-        }
-        else {
-          $('#'+group_id).prop("checked", false);
-        }
-        featureGroups[group_id] = 1;
-      }
-
-      var special_hl = el.getAttribute('data-highlight');
-
-      // Check if entry is checked
-      if (el.checked || special_hl) {  
-        var data_colours = el.getAttribute('data-colour');
-        var var_colours  = data_colours.split(';');
-
-        var input_value = el.value;
-        
-        var pos_list = input_value.split(';');
-console.log(">> FEATURE "+el.id+" | "+data_colours+" | "+input_value);
-        $.each(pos_list, function(index, se_pos) {
-
-          var pos = se_pos.split(',');
-
-          // Colour the AA 1 by 1 because of some gaps in the 3D models messing up the colouration of a range of sequence.
-          for (var i = Number(pos[0]); i <= Number(pos[1]); i++) {
- 
-            var start_residue = i;
-            var end_residue   = i;
-
-            var var_colour;
-            if (var_colours.length > 1) {
-              if (var_colours[index]) {
-                var_colour = var_colours[index];
-              }
-              else if (panel.isOdd(index)) {
-                var_colour = var_colours[1];
-              }
-              else {
-                var_colour = var_colours[0];
-              }
-            }
-            else {
-              var_colour = var_colours[0];
-            }
-
-            for (var j = 0; j < pdb_chain_ids.length; j++) {
-              var chain = pdb_chain_ids[j];
-              var struct_asym = chain; 
-              var entity = 1;
-              if (panel.pdb_chain_struc_entity[panel.pdb_id] && panel.pdb_chain_struc_entity[panel.pdb_id][chain]) {
-                entity      = panel.pdb_chain_struc_entity[panel.pdb_id][chain]['entity_id'];
-                struct_asym = panel.pdb_chain_struc_entity[panel.pdb_id][chain]['struct_asym_id'];
-              }
-//console.log(panel.pdb_id+" CHAIN - STRUCT - ENTITY: "+chain+" | "+struct_asym+" | "+entity);  
-              var selectionDetails = {
-                                       entity_id : entity, 
-                                       struct_asym_id : struct_asym,
-                                       start_residue_number : start_residue, 
-                                       end_residue_number : end_residue,
-                                       color: panel.hexa_to_rgb[var_colour],
-                                       checked: el.checked
-                                     };
-              if (el.checked) {
-                residueDetails.push(selectionDetails);
-              }
-              // Special highlighting with side chaine
-              if (typeof special_hl !== typeof undefined && special_hl !== false && special_hl !== null) {
-                var hl_list = special_hl.split(';');
-                if (hl_list[index] == 1) {
-                  specialResidueDetails.push(selectionDetails);
-                }
-              }
-
-            }
-          }
-        });
-      }
-    }); 
+    console.log("# selectedFeaturesToHighlight => residueDetails: "+residueDetails.length+" | specialResidueDetails: "+specialResidueDetails.length);
 
     // Implementation from LiteMol core example
     var model = panel.liteMolScope.LiteMolComponent.plugin.context.select('model')[0];
@@ -484,122 +399,113 @@ console.log(">> FEATURE "+el.id+" | "+data_colours+" | "+input_value);
       // instead of "polymer-visual", "model" or any valid ref can be used: all "child" visuals will be colored.
       LiteMolPluginInstance.CustomTheme.applyTheme(panel.liteMolScope.LiteMolComponent.plugin, 'polymer-visual', theme);
     }
-
   },
-
-
-  get_var_data: function(var_id) {
+  
+  features2LiteMol: function(pdb_feature_entry_array, pdb_chain_ids) {
     var panel = this;
+    var residueDetails = [];
+    var specialResidueDetails = [];
+    var featureGroups = {};   
+ 
+    pdb_feature_entry_array.each(function(index, el) {
 
-    var var_id_param = this.getParameterByName("v");
-    if (var_id_param) {
-      var_id = var_id_param;
-    }
-    else if ($("#var_id").length) {
-      var_id = $("#var_id").html();
-    }
-
-    panel.var_id = var_id
-
-    $("#var_id").html(panel.var_id);
-
-    $.ajax({
-        url: panel.rest_var_url+panel.var_id,
-        method: "GET",
-        contentType: "application/json; charset=utf-8",
-        success: function (data) { 
-          //console.log(data);
-          panel.parse_var_results(data);
-          var coords = data.mappings[0].location;
-          var chr_start_end = coords.split(':');
-          var start_end = chr_start_end[1].split('-');
-          if (start_end[0]>start_end[1]) {
-            coords=chr_start_end[0]+":"+start_end[1]+"-"+start_end[0];
+      // Check whether all the group entries have been checked or not
+      // Then it check or uncheck the "Group" checkbox
+      var group_id = el.getAttribute('data-group');
+      var is_enabled = $(this).hasClass('view_enabled');
+      if (!featureGroups[group_id]) {
+        var pdb_feature_entry_array = $('[data-group="'+group_id+'"]');
+        var count_checked = 0;
+        pdb_feature_entry_array.each(function() {
+          if ($(this).hasClass('view_enabled')) {
+            count_checked++;
           }
-          panel.get_proteins_list(coords);
-        },
-        error: function (xhRequest, ErrorText, thrownError) {
-          console.log('ErrorText: ' + ErrorText + "\n");
-          console.log('thrownError: ' + thrownError + "\n");
+        });
+        if (count_checked == pdb_feature_entry_array.length) {
+        //  $('#'+group_id).prop("checked", true);
+          $('#'+group_id).switchClass('view_disabled','view_enabled');
         }
-    });
-    console.log("Variation coordinates and most severe consequence done");
-  },
-
-  // Parse results from the Ensembl REST call and display the data
-  parse_var_results: function(data) {
-    var panel = this;
-    if (!data.error) {
-      panel.var_cons = data.most_severe_consequence;
-      $('#msc_var').html(panel.var_cons);
-    }
-  },
-
-  get_proteins_list: function(coords) {
-    var panel = this;
-
-    $('#right_form').addClass('loader_small');
-    $.ajax({
-      url: panel.rest_overlap_url+coords+'?feature=cds',
-      method: "GET",
-      contentType: "application/json; charset=utf-8",
-      success: function (data) {
-        panel.parse_prot_results(data);
-      },
-      error: function (xhRequest, ErrorText, thrownError) {
-        console.log('ErrorText: ' + ErrorText + "\n");
-        console.log('thrownError: ' + thrownError + "\n");
-      }
-    });
-    console.log("Protein list done");
-  },
-
-  parse_prot_results: function(data) {
-    var panel = this;
-    if (!data.error) {
-      var prot_list = [];
-      $.each(data,function (index, result) {
-        var pr = result.protein_id;
-        if (jQuery.inArray(pr,prot_list) == -1) {
-          prot_list.push(pr);
-          panel.get_prot_length(pr);
+        else {
+        //  $('#'+group_id).prop("checked", false);
+          $('#'+group_id).switchClass('view_enabled','view_disabled');
         }
-      });
-      prot_list.sort();
-    
-      $('#right_form').removeClass('loader_small');
-      $('#ensp_list').html('');
-      $('#pdb_list').html('');
-    
-      if (prot_list.length == 0) {
-        panel.showNoData();
+        featureGroups[group_id] = 1;
       }
-      else if (prot_list.length == 1) {
-        var pr_id = prot_list[0];
-        panel.ensp_id = pr_id;
-        panel.get_pdb_list(pr_id,1);
-      }
-      else {
-        panel.get_all_pdb_list(prot_list);
-      }
-    }
-  },
 
-  get_prot_length: function(ensp) {
-    var panel = this;
-    $.ajax({
-        url: panel.rest_lookup_url+ensp,
-        method: "GET",
-        contentType: "application/json; charset=utf-8",
-        success: function (data) {
-          panel.ensp_length[ensp] = data.length;
-        },
-        error: function (xhRequest, ErrorText, thrownError) {
-          console.log('ErrorText: ' + ErrorText + "\n");
-          console.log('thrownError: ' + thrownError + "\n");
-        }
+      var special_hl = el.getAttribute('data-highlight');
+
+      // Check if entry is checked
+      if (is_enabled || special_hl) {  
+        var data_colours = el.getAttribute('data-colour');
+        var var_colours  = data_colours.split(';');
+        var data_value   = el.getAttribute('data-value');
+        
+        var pos_list = data_value.split(';');
+//console.log(">> FEATURE "+el.id+" | "+data_colours+" | "+data_value);
+        $.each(pos_list, function(index, se_pos) {
+
+          var pos = se_pos.split(',');
+
+          // Colour the AA 1 by 1 because of some gaps in the 3D models messing up the colouration of a range of sequence.
+          for (var i = Number(pos[0]); i <= Number(pos[1]); i++) {
+ 
+            var start_residue = i;
+            var end_residue   = i;
+
+            var var_colour;
+            if (var_colours.length > 1) {
+              if (var_colours[index]) {
+                var_colour = var_colours[index];
+              }
+              else if (panel.isOdd(index)) {
+                var_colour = var_colours[1];
+              }
+              else {
+                var_colour = var_colours[0];
+              }
+            }
+            else {
+              var_colour = var_colours[0];
+            }
+console.log("VALUE: "+start_residue+" | "+var_colour);
+            for (var j = 0; j < pdb_chain_ids.length; j++) {
+              var chain = pdb_chain_ids[j];
+              var struct_asym = chain; 
+              var entity = 1;
+              if (panel.pdb_chain_struc_entity[panel.pdb_id] && panel.pdb_chain_struc_entity[panel.pdb_id][chain]) {
+                entity      = panel.pdb_chain_struc_entity[panel.pdb_id][chain]['entity_id'];
+                struct_asym = panel.pdb_chain_struc_entity[panel.pdb_id][chain]['struct_asym_id'];
+              }
+//console.log(panel.pdb_id+" CHAIN - STRUCT - ENTITY: "+chain+" | "+struct_asym+" | "+entity);  
+              var selectionDetails = {
+                                       entity_id : entity, 
+                                       struct_asym_id : struct_asym,
+                                       start_residue_number : start_residue, 
+                                       end_residue_number : end_residue,
+                                       color: panel.hexa_to_rgb[var_colour],
+                                       checked: is_enabled
+                                     };
+              if (is_enabled) {
+                residueDetails.push(selectionDetails);
+              }
+              // Special highlighting with side chaine
+              if (typeof special_hl !== typeof undefined && special_hl !== false && special_hl !== null) {
+                var hl_list = special_hl.split(';');
+                if (hl_list[index] == 1) {
+                  specialResidueDetails.push(selectionDetails);
+                }
+              }
+
+            }
+          }
+        });
+      }
     });
+    return [residueDetails,specialResidueDetails];
   },
+  
+ 
+  ///// PDB data /////
 
   get_pdb_list: function(ensp,display) {
     var panel = this;
@@ -628,17 +534,6 @@ console.log(">> FEATURE "+el.id+" | "+data_colours+" | "+input_value);
         }
       });
       console.log("Variant Pr coord");
-    }
-  },
-  parse_tv_results: function(data,ensp) {
-    var panel = this;
-    if (!data.error) {
-      $.each(data,function (index, result) {
-        if (panel.var_id == result.id) {
-          panel.ensp_var_pos[ensp] = result.start+'-'+result.end;
-          return true;
-        }
-      });
     }
   },
 
@@ -712,6 +607,7 @@ console.log(">> FEATURE "+el.id+" | "+data_colours+" | "+input_value);
       } 
     });
   },
+  
   parse_pdb_results: function(data,ensp,display) {
     var panel = this;
 
@@ -840,10 +736,7 @@ console.log(pdb_id+": "+result.start+"-"+result.end+" (struct_asym "+chains+")")
         selected_pdb = pdb_id;
       }
       else {
-        $('#pdb_list').append($('<option>', {
-          value: '-',
-          text : '-'
-        }));
+        $('#pdb_list').append($('<option>', { value: '-',  text : '-' }));
         var first_pdb_entry = 1;
 
         $.each(pdb_objs, function (i, pdb_obj) {
@@ -876,7 +769,6 @@ console.log("Load PDB model - after");
     }
     $('#ensp_pdb').show();
   },
-
 
   get_all_pdb_list: function(ensp_list) {
     var panel = this;
@@ -937,6 +829,141 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     });
 
   },
+  
+  
+  ///// Ensembl data /////
+
+  // Variant data & Ensembl protein list
+  get_var_data: function(var_id) {
+    var panel = this;
+
+    var var_id_param = this.getParameterByName("v");
+    if (var_id_param) {
+      var_id = var_id_param;
+    }
+    else if ($("#var_id").length) {
+      var_id = $("#var_id").html();
+    }
+
+    panel.var_id = var_id
+
+    $("#var_id").html(panel.var_id);
+
+    $.ajax({
+        url: panel.rest_var_url+panel.var_id,
+        method: "GET",
+        contentType: "application/json; charset=utf-8",
+        success: function (data) {
+          // Variant data
+          panel.parse_var_results(data);
+          
+          // Ensembl protein data
+          var coords = data.mappings[0].location;
+          var chr_start_end = coords.split(':');
+          var start_end = chr_start_end[1].split('-');
+          if (start_end[0]>start_end[1]) {
+            coords=chr_start_end[0]+":"+start_end[1]+"-"+start_end[0];
+          }
+          panel.get_ens_proteins_list(coords);
+        },
+        error: function (xhRequest, ErrorText, thrownError) {
+          console.log('ErrorText: ' + ErrorText + "\n");
+          console.log('thrownError: ' + thrownError + "\n");
+        }
+    });
+    console.log("Variation coordinates and most severe consequence done");
+  },
+
+  // Parse results from the Ensembl REST call and display the data
+  parse_var_results: function(data) {
+    var panel = this;
+    if (!data.error) {
+      panel.var_cons = data.most_severe_consequence;
+      $('#msc_var').html(panel.var_cons);
+    }
+  },
+
+  get_ens_proteins_list: function(coords) {
+    var panel = this;
+
+    $('#right_form').addClass('loader_small');
+    $.ajax({
+      url: panel.rest_overlap_url+coords+'?feature=cds',
+      method: "GET",
+      contentType: "application/json; charset=utf-8",
+      success: function (data) {
+        panel.parse_ens_protein_results(data);
+      },
+      error: function (xhRequest, ErrorText, thrownError) {
+        console.log('ErrorText: ' + ErrorText + "\n");
+        console.log('thrownError: ' + thrownError + "\n");
+      }
+    });
+    console.log("Protein list done");
+  },
+
+  parse_ens_protein_results: function(data) {
+    var panel = this;
+    if (!data.error) {
+      var prot_list = [];
+      $.each(data,function (index, result) {
+        var pr = result.protein_id;
+        if (jQuery.inArray(pr,prot_list) == -1) {
+          prot_list.push(pr);
+          panel.get_ens_protein_length(pr);
+        }
+      });
+      prot_list.sort();
+    
+      $('#right_form').removeClass('loader_small');
+      $('#ensp_list').html('');
+      $('#pdb_list').html('');
+    
+      if (prot_list.length == 0) {
+        panel.showNoData();
+      }
+      else if (prot_list.length == 1) {
+        var pr_id = prot_list[0];
+        panel.ensp_id = pr_id;
+        panel.get_pdb_list(pr_id,1);
+      }
+      else {
+        panel.get_all_pdb_list(prot_list);
+      }
+    }
+  },
+
+  get_ens_protein_length: function(ensp) {
+    var panel = this;
+    $.ajax({
+        url: panel.rest_lookup_url+ensp,
+        method: "GET",
+        contentType: "application/json; charset=utf-8",
+        success: function (data) {
+          panel.ensp_length[ensp] = data.length;
+        },
+        error: function (xhRequest, ErrorText, thrownError) {
+          console.log('ErrorText: ' + ErrorText + "\n");
+          console.log('thrownError: ' + thrownError + "\n");
+        }
+    });
+  },
+  
+  parse_tv_results: function(data,ensp) {
+    var panel = this;
+    if (!data.error) {
+      $.each(data,function (index, result) {
+        if (panel.var_id == result.id) {
+          panel.ensp_var_pos[ensp] = result.start+'-'+result.end;
+          return true;
+        }
+      });
+    }
+  },
+  
+  
+  ///// Get and display Ensembl features /////
+  
   get_exon_data: function(ensp_id) {
     var panel = this;
 
@@ -1006,18 +1033,17 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
 
         var exon_coords = exon_pdb_start+','+exon_pdb_end;
 
-        exon_details += '<tr><td style="border-color:'+hexa_colour+'">'+
-          '<input class="pdb_feature_entry" id="exon_'+exon_number+'_cb" value="'+exon_coords+'"'+
-          ' data-group="exon_group" data-name="'+exon_number+'" data-colour="'+hexa_colour+'" '+
-          'type="checkbox"/> '+
-          exon_label+'</td><td>'+exon_pdb_start+'-'+exon_pdb_end+'</td><td>'+exon_start+'-'+exon_end+'</td></tr>';
+        exon_details += '<tr><td style="border-color:'+hexa_colour+'">'+exon_label+'</td>'+
+          '<td>'+exon_pdb_start+'-'+exon_pdb_end+'</td><td>'+exon_start+'-'+exon_end+'</td>'+
+          '<td><span class="pdb_feature_entry float_left view_disabled" id="exon_'+exon_number+'_cb" data-value="'+exon_coords+'"'+
+          ' data-group="exon_group" data-name="'+exon_number+'" data-colour="'+hexa_colour+'"></span></td></tr>';
      
         exon_count ++;
       });
 
       var label = (exon_count > 1) ? 'Exons' : 'Exon';
 
-      panel.render_selection_details('exon', label, exon_count, exon_details);
+      panel.render_selection_details('exon','exon', label, exon_count, exon_details);
     }
   },
 
@@ -1065,16 +1091,15 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
 
         var pf_coords = pf_pdb_start+','+pf_pdb_end;
  
-        pf_details += '<tr><td style="border-color:'+hexa_colour+'">'+
-          '<input class="pdb_feature_entry" id="'+type+'_cb" value="'+pf_coords+'"'+
-          ' data-group="'+lc_type+'_group" data-name="'+result.id+'" data-colour="'+hexa_colour+'" '+
-          'type="checkbox"/> '+
-          result.id+'</td><td>'+pf_pdb_start+'-'+pf_pdb_end+'</td><td>'+result.start+'-'+result.end+'</td></tr>';
+        pf_details += '<tr><td style="border-color:'+hexa_colour+'">'+result.id+'</td>'+
+         '<td>'+pf_pdb_start+'-'+pf_pdb_end+'</td><td>'+result.start+'-'+result.end+'</td>'+
+         '<td><span class="pdb_feature_entry float_left view_disabled" id="'+type+'_cb" data-value="'+pf_coords+'"'+
+         ' data-group="'+lc_type+'_group" data-name="'+result.id+'" data-colour="'+hexa_colour+'"></span></td></tr>';
         
         pf_count ++;
       });
 
-      panel.render_selection_details(lc_type, type, pf_count, pf_details);
+      panel.render_selection_details('protein', lc_type, type, pf_count, pf_details);
     }
   },
 
@@ -1138,12 +1163,12 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
           sift_colour = 'red';
         }
 
-        sift_details += '<tr><td style="border-color:'+sift_colour+'">'+
-          '<input class="pdb_feature_entry" id="sift_'+result.id+'_cb" value="'+sift_coords+'"'+
-          ' data-group="sift_group" data-name="'+result.id+'" data-colour="'+sift_colour+'" '+
-          'type="checkbox"/> '+
-          result.id+'</td><td>'+var_pdb+'</td><td>'+var_ensp+'</td>'+
-          '<td>'+sift_residues+'</td><td><div class="score '+sift_class+'">'+sift_score+'</div></td></tr>';
+        var var_id = panel.add_var_link(result.id);
+
+        sift_details += '<tr><td style="border-color:'+sift_colour+'">'+var_id+'</td><td>'+var_pdb+'</td><td>'+var_ensp+'</td>'+
+          '<td>'+sift_residues+'</td><td><div class="score '+sift_class+'">'+sift_score+'</div></td>'+
+          '<td><span class="pdb_feature_entry float_left view_disabled" id="sift_'+result.id+'_cb" data-value="'+sift_coords+'"'+
+          ' data-group="sift_group" data-name="'+result.id+'" data-colour="'+sift_colour+'"></span></td></tr>';
         
         sift_count++;
       }
@@ -1156,7 +1181,7 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
                  '  <div style="clear:both"></div>'+
                  '</div>';
 
-    panel.render_selection_details('sift', 'SIFT', sift_count, sift_details, 'Residues;Score', legend);
+    panel.render_selection_details('variant','sift', 'SIFT', sift_count, sift_details, 'Residues;Score', legend);
   },
   parse_polyphen_results: function(data) {
     var panel = this;
@@ -1207,12 +1232,12 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
           polyphen_colour = 'green';
         }
 
-        polyphen_details += '<tr><td style="border-color:'+polyphen_colour+'">'+
-          '<input class="pdb_feature_entry" id="polyphen_'+result.id+'_cb" value="'+polyphen_coords+'"'+
-          ' data-group="polyphen_group" data-name="'+result.id+'" data-colour="'+polyphen_colour+'" '+
-          'type="checkbox"/> '+
-          result.id+'</td><td>'+var_pdb+'</td><td>'+var_ensp+'</td>'+
-          '<td>'+polyphen_residues+'</td><td><div class="score '+polyphen_class+'">'+polyphen_score+'</div></td></tr>';
+        var var_id = panel.add_var_link(result.id);
+
+        polyphen_details += '<tr><td style="border-color:'+polyphen_colour+'">'+var_id+'</td><td>'+var_pdb+'</td><td>'+var_ensp+'</td>'+
+          '<td>'+polyphen_residues+'</td><td><div class="score '+polyphen_class+'">'+polyphen_score+'</div></td>'+
+          '<td><span class="pdb_feature_entry float_left view_disabled" id="polyphen_'+result.id+'_cb" data-value="'+polyphen_coords+'"'+
+          ' data-group="polyphen_group" data-name="'+result.id+'" data-colour="'+polyphen_colour+'"></span></td></tr>';
         
         polyphen_count++;
       }
@@ -1227,21 +1252,24 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
                  '  <div style="clear:both"></div>'+
                  '</div>';
 
-    panel.render_selection_details('polyphen', 'PolyPhen', polyphen_count, polyphen_details, 'Residues;Score', legend);
+    panel.render_selection_details('variant','polyphen', 'PolyPhen', polyphen_count, polyphen_details, 'Residues;Score', legend);
   },
 
-  render_selection_details: function (type,type_label,type_count,details,extra_col,legend) {
+  render_selection_details: function (category,type,type_label,type_count,details,extra_col,legend) {
     var panel = this;
 
+    var cat_id    = category+'_block';
     var td_label  = type+'_label';
     var row_id    = type+'_row';
     var cb_group  = type+'_group';
+   
 
     var label_id     = type+'_details';
     var label_id_div = label_id+'_div';
 
     
     extra_col = (extra_col) ? '<th>'+extra_col.replace(';','</th><th>')+'</th>' : '';
+    view_col  = '<th></th>';
 
     legend = (legend) ? legend : '';
 
@@ -1252,69 +1280,34 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
         label = $('#'+td_label);
       }
       else {
-        label = $('<td></td>');
+        label = $('<div></div>');
         label.attr('id', td_label);
       }
       label.html(
         '<div>'+
-        '  <div class="cb">'+
-        '    <input class="pdb_feature_group" id="'+cb_group+'" type="checkbox"/>'+
-        '  </div>'+
-        '  <div style="float:left;vertical-align:middle">'+type_label+' ('+type_count+') </div>'+
-        '  <div style="float:right"><a rel="'+label_id+'" class="toggle_link toggle _slide_toggle set_cookie closed"></a></div>'+
+        '  <h3 class="float_left" style="margin-bottom:0px">'+type_label+' ('+type_count+') </h3>'+
+        '  <div class="float_right view_toggle closed" rel="'+label_id+'"></div>'+
+        '  <div class="float_right pdb_feature_group view_disabled" title="Click to highlight / hide '+type_label+' on the 3D viewer" id="'+cb_group+'"></div>'+
         '  <div style="clear:both"></div>'+
         '</div>'+
         '<div class="'+label_id+'">'+
         '  <div id="'+label_id_div+'" class="pdb_features_container toggleable" style="padding-top:5px;display:none">'+legend+
-        '    <table class="pdb_features"><thead><tr>'+panel.details_header+extra_col+'</tr></thead><tbody>'+details+'</tbody></table>'+
+        '    <table class="pdb_features"><thead><tr>'+panel.details_header+extra_col+view_col+'</tr></thead><tbody>'+details+'</tbody></table>'+
         '  </div>'+
         '</div>');
 
       if (!$('#'+row_id).length) {
-        var row = $('<tr></tr>');
+        var row = $('<div></div>');
             row.attr('id', row_id);
             //row.append(checkbox);
             row.append(label);
-        $('#pdb_markup > tbody').append(row);
+        $('#'+cat_id).append(row);
       }
     }
     else if ($('#'+row_id).length) {
       $('#'+row_id).remove();
     }
-  },
-
-  sin_to_hex: function(i, phase, size) {
-    var sin = Math.sin(Math.PI / size * 2 * i + phase);
-    var intg = Math.floor(sin * 127) + 128;
-    var hexa = intg.toString(16);
-
-    return hexa.length === 1 ? "0"+hexa : hexa;
-  },
-  get_hexa_colour: function(index, size) {
-    var panel = this;
-
-    var red   = panel.sin_to_hex(index, 0 * Math.PI * 2/3, size); // 0   deg
-    var blue  = panel.sin_to_hex(index, 1 * Math.PI * 2/3, size); // 120 deg
-    var green = panel.sin_to_hex(index, 2 * Math.PI * 2/3, size); // 240 deg
-
-    var hexa_colour = "#"+ red + green + blue
-    panel.add_colour(hexa_colour);
-
-    return hexa_colour;
-  },
-  add_colour: function(hexa) {
-    var panel = this;
-
-    if (!panel.hexa_to_rgb[hexa]) {
-
-      var h=hexa.replace('#', '');
-      var bigint = parseInt(h, 16);
-      var r_colour = (bigint >> 16) & 255;
-      var g_colour = (bigint >> 8) & 255;
-      var b_colour = bigint & 255;
-
-      panel.hexa_to_rgb[hexa] = {r:r_colour, g:g_colour, b:b_colour};
-    }
+    $('._ht').helptip();
   },
 
   ensp_to_pdb_coords: function(start_res, end_res) {
@@ -1359,6 +1352,50 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     return [pdb_res_start,pdb_res_end];
   },
 
+
+  ///// Colouration methods /////
+  
+  sin_to_hex: function(i, phase, size) {
+    var sin = Math.sin(Math.PI / size * 2 * i + phase);
+    var intg = Math.floor(sin * 127) + 128;
+    var hexa = intg.toString(16);
+
+    return hexa.length === 1 ? "0"+hexa : hexa;
+  },
+  get_hexa_colour: function(index, size) {
+    var panel = this;
+
+    var red   = panel.sin_to_hex(index, 0 * Math.PI * 2/3, size); // 0   deg
+    var blue  = panel.sin_to_hex(index, 1 * Math.PI * 2/3, size); // 120 deg
+    var green = panel.sin_to_hex(index, 2 * Math.PI * 2/3, size); // 240 deg
+
+    var hexa_colour = "#"+ red + green + blue
+    panel.add_colour(hexa_colour);
+
+    return hexa_colour;
+  },
+  add_colour: function(hexa) {
+    var panel = this;
+
+    if (!panel.hexa_to_rgb[hexa]) {
+
+      var h=hexa.replace('#', '');
+      var bigint = parseInt(h, 16);
+      var r_colour = (bigint >> 16) & 255;
+      var g_colour = (bigint >> 8) & 255;
+      var b_colour = bigint & 255;
+
+      panel.hexa_to_rgb[hexa] = {r:r_colour, g:g_colour, b:b_colour};
+    }
+  },
+
+  add_var_link: function(var_id) {
+    return '<a href="/Homo_sapiens/Variation/Explore?v='+var_id+'" target="_blank">'+var_id+'</a>';
+  },
+
+
+  ///// Generic methods /////
+
   isOdd: function(num) { return num % 2;},
 
   // Function to retrieve the searched term 
@@ -1388,3 +1425,4 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     $('#pdb_msg').removeClass('spinner');
   }
 });
+
