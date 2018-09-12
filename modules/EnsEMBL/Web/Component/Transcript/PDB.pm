@@ -51,16 +51,18 @@ sub content {
   
   <!-- Complied & minified library css -->
   <link rel="stylesheet" href="https://www.ebi.ac.uk/pdbe/pdb-component-library/v1.0/css/pdb.component.library.min-1.0.0.css" />
+  <!--<link rel="stylesheet" href="/pdbe/pdb.component.library.min-1.0.0.css" />-->
 
   <!-- Dependencey scripts (these can be skipped if already included in page) -->
   <!--<script src="http://www.ebi.ac.uk/pdbe/pdb-component-library/libs/d3.min.js"></script>-->
   <script src="/pdbe/d3.min.js"></script>
-  <script src="https://www.ebi.ac.uk/pdbe/pdb-component-library/libs/angular.1.4.7.min.js"></script>
-  <!--<script src="/pdbe/angular.1.4.7.min.js"></script>-->
+  <!--<script src="https://www.ebi.ac.uk/pdbe/pdb-component-library/libs/angular.1.4.7.min.js"></script>-->
+  <script src="/pdbe/angular.1.4.7.min.js"></script>
 
   <!-- Complied & minified library JS -->
-  <script src="https://www.ebi.ac.uk/pdbe/pdb-component-library/v1.0/js/pdb.component.library.min-1.0.0.js"></script>
-  <!--<script src="/pdbe/pdb.component.library.min-1.0.0.js"></script>-->
+  <!--<script src="https://www.ebi.ac.uk/pdbe/pdb-component-library/v1.0/js/pdb.component.library.min-1.0.0.js"></script>-->
+  
+  <script src="/pdbe/pdb.component.library.min-1.0.0.js"></script>
   <!--<script src="//www.ebi.ac.uk/~lgil/tests/3d/popup/litemol-custom-theme.js"></script>-->
   <!--<script src="http://ves-hx2-76.ebi.ac.uk:5060/pdbe/litemol-custom-theme.js"></script>-->
   
@@ -68,12 +70,11 @@ sub content {
    
   <div id="pdb_msg"></div>
 
-  <div id="ensp_pdb" style="padding-bottom:6px;display:none">
-    <div style="float:left;padding-right:5px">Select PDB model: </div>
+  <div id="ensp_pdb" class="navbar" style="display:none">
     <div style="float:left">
       <form>
-       <!--<select id="ensp_list"></select>-->
-       <select id="pdb_list" style="display:none;margin-left:5px"></select>
+        <label id="pdb_list_label" class="left-margin" style="display:none">Select PDBe model:</label>
+        <select id="pdb_list" style="display:none;margin-left:5px"></select>
       </form>
     </div>
     <div id="right_form" style="float:left;margin-left:15px"></div>
@@ -87,39 +88,76 @@ sub content {
     </div>
 
     <div id="litemol_buttons" style="float:left;margin-left:20px;display:none">
-      <table id="pdb_markup" class="ss">
-      <thead>
-        <tr><th>Data type</th></tr>
-      </thead>
-      <tbody>
+      <table class="ss pdb_markup">
+        <thead>
+          <tr><th class="pdb_category"><span id="mapping_ensp"></span> - <span id="mapping_pdb"></span> mapping</th></tr>
+        </thead>
+        <tbody>
 
-        <tr>
-          <td>
-            <div>
-              <div class="cb">
-                <input class="pdb_feature_group" id="mapping_group" type="checkbox"/>
+          <tr>
+            <td id="mapping_block">
+              <div>
+                <div>
+                  <h3 class="float_left" style="margin-bottom:0px">Ensembl-PDBe mapping coverage</h3>
+                  <div class="float_right view_toggle open" rel="mapping_details"></div>
+                  <div class="float_right pdb_feature_group view_enabled" title="Click to highlight / hide ENSP-PDB mapping coverage on the 3D viewer" id="mapping_group"></div>
+                  <div style="clear:both"></div>
+                </div>
+                <div class="mapping_details">
+                  <div id="mapping_details_div" class="pdb_features_container toggleable" style="padding-top:5px">
+                    <table class="pdb_features">
+                      <thead><tr><th>Label</th><th>PDB coords</th><th>ENSP coords</th><th></th></tr></thead>
+                      <tbody>
+                        <tr>
+                          <td style="border-color:#DDD">Coverage</td><td id="mapping_pdb_pos"></td><td id="mapping_ensp_pos"></td>
+                          <td>
+                            <span class="pdb_feature_entry view_enabled float_left" id="mapping_cb" data-value="" data-group="mapping_group" data-name="Mapping" data-colour="#DDD"></span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-              <div style="float:left;vertical-align:middle">ENSP-PDB mapping coverage</div>
-              <div style="float:right"><a rel="mapping_details" href="#" class="toggle_link toggle _slide_toggle set_cookie open"></a></div>
-              <div style="clear:both"></div>
-            </div>
-            <div class="mapping_details">
-              <div id="mapping_details_div" class="pdb_features_container toggleable" style="padding-top:5px">
-                <table class="pdb_features">
-                  <thead><tr><th>Label</th><th>PDB coords</th><th>ENSP coords</th></tr></thead>
-                  <tbody>
-                    <tr><td style="border-color:#DDD"><input class="pdb_feature_entry" id="mapping_cb" value="" data-group="mapping_group" data-name="Mapping" data-colour="#DDD" type="checkbox"/> Coverage</td><td id="mapping_pdb_pos"></td><td id="mapping_ensp_pos"></td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </td>
-        </tr>
-
-      </tbody>
+            </td>
+          </tr>
+        </tbody>
       </table>
-    </div>
 
+      <table class="ss pdb_markup">
+        <thead>
+          <tr><th class="pdb_category">Exons</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td id="exon_block"></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table class="ss pdb_markup">
+        <thead>
+          <tr><th class="pdb_category">Protein information</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td id="protein_block"></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table class="ss pdb_markup">
+        <thead>
+          <tr><th class="pdb_category">Variants</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td id="variant_block"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div> 
+   
     <div style="clear:both"></div>
 
   </div>
