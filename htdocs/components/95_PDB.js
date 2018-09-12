@@ -53,6 +53,11 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
     this.ensp_var_pos  = {};
     this.ensp_length   = {};
 
+    this.failed_get_ensp_length = {};
+
+    this.mapping_min_percent = 50
+    this.mapping_min_length  = 10;
+
     this.pdb_id;
     this.pdb_start;
     this.pdb_end;
@@ -115,24 +120,18 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
       // Select a group of features to highlight
       $(document).on('click', '.pdb_feature_group', function() {
         $(this).toggleClass('view_enabled view_disabled');
-/*        if ($(this).hasClass('view_enabled')) {
-          $(this).switchClass('view_enabled','view_disabled');
-        }
-        else {
-          $(this).switchClass('view_disabled','view_enabled');
-        }*/
         panel.selectedFeatureGroupsToHighlight($(this).attr('id'));
+      });
+
+      // Select a subgroup of features to highlight
+      $(document).on('click', '.pdb_feature_subgroup', function() {
+        $(this).toggleClass('view_enabled view_disabled');
+        panel.selectedFeatureSubGroupsToHighlight($(this).attr('id'));
       });
       
       // Select a feature (or a list of features) to highlight
       $(document).on('click', '.pdb_feature_entry', function() {
         $(this).toggleClass('view_enabled view_disabled');
-/*        if ($(this).hasClass('view_enabled')) {
-          $(this).switchClass('view_enabled','view_disabled');
-        }
-        else {
-          $(this).switchClass('view_disabled','view_enabled');
-        }*/
         panel.selectedFeaturesToHighlight();
       });
       
@@ -141,11 +140,9 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
         var div_id = '#'+$(this).attr('rel')+'_div';
         if ($(this).hasClass('closed')) {
           $(div_id).show();
-          //$(this).switchClass('closed','open');
         }
         else {
           $(div_id).hide();
-          //$(this).switchClass('open','closed');
         }
         $(this).toggleClass('open closed');
       });
@@ -174,6 +171,10 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
       panel.pdb_chains    = sel.attr('data-chain').split(',');
       panel.pdb_hit_start = Number(sel.attr('data-hit-start'));
       console.log("PDB coords of "+pdb_id+" (on ENSP): "+panel.pdb_start+'-'+panel.pdb_end);
+
+      $('#mapping_ensp').html('<a href="/Homo_sapiens/Transcript/Summary?t='+panel.ensp_id+'" style="color:white">'+panel.ensp_id+'</a>');
+      $('#mapping_pdb').html('<a href="https://www.ebi.ac.uk/pdbe/entry/pdb/'+pdb_id+'" rel="external" style="color:white">'+pdb_id.toUpperCase()+'</a>');
+
 
       // Assign position to variant
       if (panel.var_id) {
@@ -256,16 +257,15 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
       var checkExist = setInterval(function() {
         if (panel.liteMolScope.LiteMolComponent.plugin.context.select('model')[0] != undefined || interval_iteration_count == max_interval_iteration) {
           if (interval_iteration_count == max_interval_iteration) {
-            console.log("Model loading take too long!");
+            console.log("Model loading takes too long!");
           }
           else {
             console.log("Model loading done! => "+interval_iteration_count);
           }
-          clearInterval(checkExist);
-          checkExist = 0;
           var timeout = (panel.var_id) ? 0 : 200;
           setTimeout(function(){ panel.selectedFeatureGroupsToHighlight(); }, timeout);
-//          panel.selectedFeatureGroupsToHighlight();
+          clearInterval(checkExist);
+          checkExist = 0;
         }
         interval_iteration_count ++;
       }, 100);
@@ -288,10 +288,8 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
     $('div[id$='+id+']').each(function() {
       var gp_id = $(this).attr('id');
 
-      //var is_checked = $('#'+gp_id).is(':checked');
       var is_selected = $('#'+gp_id).hasClass('view_enabled');
-//console.log("GROUP ID: "+gp_id+" => "+is_checked);
-console.log("GROUP ID: "+gp_id+" => "+is_selected);
+//console.log("GROUP ID: "+gp_id+" => "+is_selected);
       var pdb_feature_entry_array = $('[data-group="'+gp_id+'"]');
 
       pdb_feature_entry_array.each(function() {
@@ -306,13 +304,37 @@ console.log("GROUP ID: "+gp_id+" => "+is_selected);
 
     panel.selectedFeaturesToHighlight();
   },
-  
+
+  // Select/unselect a subgroup of entries to highlight
+  selectedFeatureSubGroupsToHighlight: function(id) {
+    var panel = this;
+
+    if (!id) {
+      id = '_sg';
+    }
+    $('div[id$='+id+']').each(function() {
+      var subgp_id = $(this).attr('id');
+
+      var is_selected = $('#'+subgp_id).hasClass('view_enabled');
+      var pdb_feature_entry_array = $('[data-sg="'+subgp_id+'"]');
+    
+      pdb_feature_entry_array.each(function() {
+        if (is_selected) {
+          $(this).switchClass('view_disabled','view_enabled');
+        }
+        else {
+          $(this).switchClass('view_enabled','view_disabled');
+        }
+      });
+    });
+
+    panel.selectedFeaturesToHighlight();
+  },
+
+
+  // Select/unselect a list of entries to highlight  
   selectedFeaturesToHighlight: function() {
     var panel = this;
-    //var residueDetails = [];
-    //var specialResidueDetails = [];
-    //var featureGroups = {};
-    
 
     if (!panel.liteMolScope) {
       return;      
@@ -406,7 +428,7 @@ console.log("GROUP ID: "+gp_id+" => "+is_selected);
     var residueDetails = [];
     var specialResidueDetails = [];
     var featureGroups = {};   
- 
+
     pdb_feature_entry_array.each(function(index, el) {
 
       // Check whether all the group entries have been checked or not
@@ -422,12 +444,16 @@ console.log("GROUP ID: "+gp_id+" => "+is_selected);
           }
         });
         if (count_checked == pdb_feature_entry_array.length) {
-        //  $('#'+group_id).prop("checked", true);
           $('#'+group_id).switchClass('view_disabled','view_enabled');
+          if ($("#"+group_id+"[data-has-sg]").length) {
+            $('[data-super-group="'+group_id+'"]').switchClass('view_disabled','view_enabled');
+          }
         }
         else {
-        //  $('#'+group_id).prop("checked", false);
           $('#'+group_id).switchClass('view_enabled','view_disabled');
+          if ($("#"+group_id+"[data-has-sg]").length && count_checked == 0) {
+            $('[data-super-group="'+group_id+'"]').switchClass('view_enabled','view_disabled');
+          }
         }
         featureGroups[group_id] = 1;
       }
@@ -467,7 +493,7 @@ console.log("GROUP ID: "+gp_id+" => "+is_selected);
             else {
               var_colour = var_colours[0];
             }
-console.log("VALUE: "+start_residue+" | "+var_colour);
+//console.log("VALUE: "+start_residue+" | "+var_colour);
             for (var j = 0; j < pdb_chain_ids.length; j++) {
               var chain = pdb_chain_ids[j];
               var struct_asym = chain; 
@@ -509,6 +535,7 @@ console.log("VALUE: "+start_residue+" | "+var_colour);
 
   get_pdb_list: function(ensp,display) {
     var panel = this;
+    $('#pdb_list_label').hide();
     $('#pdb_list').hide(); 
     $('#right_form').addClass('loader_small');
 
@@ -655,7 +682,7 @@ console.log("VALUE: "+start_residue+" | "+var_colour);
             var pdb_size = result.end - result.start + 1;
             var chains = pdb_struct_asyms[pdb_id].sort();
             pdb_objs.push({id: pdb_id, start: result.start, end: result.end, chain: chains, size: pdb_size, hit_start: result.hit_start, hit_end: result.hit_end});
-console.log(pdb_id+": "+result.start+"-"+result.end+" (struct_asym "+chains+")");
+//console.log(pdb_id+": "+result.start+"-"+result.end+" (struct_asym "+chains+")");
             pdb_list.push(pdb_id);
           }
         }
@@ -706,66 +733,67 @@ console.log(pdb_id+": "+result.start+"-"+result.end+" (struct_asym "+chains+")")
         return b.size - a.size;
       });
       $('#right_form').removeClass('loader_small');
+      $('#pdb_list_label').hide();
       $('#pdb_list').hide();
       $('#pdb_list').html('');
+
       var selected_pdb = '';
-      if (pdb_objs.length == 1) {
-        var pdb_id = pdb_objs[0].id;
-        var pdb_start = pdb_objs[0].start;
-        var pdb_end   = pdb_objs[0].end;
-        var pdb_hit_start = pdb_objs[0].hit_start;
-        var pdb_hit_end   = pdb_objs[0].hit_end;
-        var pdb_coord = " - ("+pdb_start+"-"+pdb_end+")";
-        var pdb_chain = pdb_objs[0].chain;
+      var show_pdb_list = 0;
+      var first_pdb_entry = 1;
 
-        var pdb_mapping_length = pdb_end - pdb_start + 1;
-        var ensp_pdb_coverage = (pdb_mapping_length/ensp_length[ensp])*100;
-            ensp_pdb_coverage = Math.round(ensp_pdb_coverage * 100) / 100;
- 
-        var pdb_coord = " - (PDB: "+pdb_hit_start+'-'+pdb_hit_end+" | ENSP: "+pdb_start+"-"+pdb_end+" => "+ensp_pdb_coverage+"% of ENSP)";
-
-        $('#pdb_list').append($('<option>', {
-            'value'         : pdb_id,
-            'data-start'    : pdb_start,
-            'data-end'      : pdb_end,
-            'data-hit-start': pdb_hit_start,
-            'data-chain'    : pdb_struct_asym,
-            'text'          : pdb_id+pdb_coord,
-            'selected'      : 'selected'
-        }));
-        selected_pdb = pdb_id;
-      }
-      else {
+      var pdb_list_length = pdb_objs.length;
+      /*if (pdb_list_length != 1) {
         $('#pdb_list').append($('<option>', { value: '-',  text : '-' }));
-        var first_pdb_entry = 1;
+      }*/
 
-        $.each(pdb_objs, function (i, pdb_obj) {
-          var pdb_mapping_length = pdb_obj.end - pdb_obj.start + 1;
-          var ensp_pdb_coverage = (pdb_mapping_length/panel.ensp_length[ensp])*100;
-              ensp_pdb_coverage = Math.round(ensp_pdb_coverage * 100) / 100;
-          var pdb_coord = " - (PDB: "+pdb_obj.hit_start+'-'+pdb_obj.hit_end+" | ENSP: "+pdb_obj.start+"-"+pdb_obj.end+" => "+ensp_pdb_coverage+"% of ENSP)";
+      // Makes sure the length of the ENSP is returned before populating the list of PDBe entries
+      // The Ensembl REST call is made at the beginning of the script
+      var counter = 0;
+      var i_length = setInterval(function(){
+        counter++;
+        if(counter === 20 || panel.ensp_length[ensp] != undefined || panel.failed_get_ensp_length[ensp] != undefined) {
 
-          var pdb_option = {
-                 'value'         : pdb_obj.id,
-                 'data-start'    : pdb_obj.start,
-                 'data-end'      : pdb_obj.end,
-                 'data-hit-start': pdb_obj.hit_start,
-                 'data-chain'    : pdb_obj.chain,
-                 'text'          : pdb_obj.id + pdb_coord
-              };
-          if (first_pdb_entry == 1) {
-            pdb_option['selected'] = 'selected';
-            selected_pdb = pdb_obj.id;
-            first_pdb_entry = 0;
+          $.each(pdb_objs, function (i, pdb_obj) {
+            var pdb_mapping_length = pdb_obj.end - pdb_obj.start + 1;
+            var ensp_pdb_percent  = (pdb_mapping_length/panel.ensp_length[ensp])*100;
+            var ensp_pdb_coverage = Math.round(ensp_pdb_percent);
+
+//console.log("- "+pdb_obj.id+": "+ensp_pdb_coverage+" | "+pdb_mapping_length+" | "+panel.ensp_length[ensp]);
+            if (panel.mapping_min_percent <= ensp_pdb_coverage && panel.mapping_min_length <= pdb_mapping_length) {
+              var pdb_coord = " - Coverage: [ PDBe: "+pdb_obj.hit_start+'-'+pdb_obj.hit_end+" | ENSP: "+pdb_obj.start+"-"+pdb_obj.end+" ] => "+ensp_pdb_coverage+"% of ENSP length";
+
+              var pdb_option = {
+                     'value'         : pdb_obj.id,
+                     'data-start'    : pdb_obj.start,
+                     'data-end'      : pdb_obj.end,
+                     'data-hit-start': pdb_obj.hit_start,
+                     'data-chain'    : pdb_obj.chain,
+                     'text'          : pdb_obj.id + pdb_coord
+                  };
+              if (first_pdb_entry == 1 || pdb_list_length == 1) {
+                pdb_option['selected'] = 'selected';
+                selected_pdb = pdb_obj.id;
+                first_pdb_entry = 0;
+              }
+              $('#pdb_list').append($('<option>', pdb_option));
+              show_pdb_list = 1;
+            }
+         });
+
+         if (show_pdb_list) {
+            $('#pdb_list_label').show();
+            $('#pdb_list').show();
+            panel.selectPDBEntry(selected_pdb);
           }
-          $('#pdb_list').append($('<option>', pdb_option));
-        });
-
-      }
-      $('#pdb_list').show();
-console.log("Load PDB model - before");
-      panel.selectPDBEntry(selected_pdb);
-console.log("Load PDB model - after");
+          else {
+            panel.showNoData();
+          } 
+          if (counter === 20 && panel.ensp_length[ensp] == undefined) {
+            console.log("Fetching ENSP length through the REST API takes too long!");
+          }
+          clearInterval(i_length);
+        }
+      }, 100);
     }
     $('#ensp_pdb').show();
   },
@@ -945,6 +973,7 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
         error: function (xhRequest, ErrorText, thrownError) {
           console.log('ErrorText: ' + ErrorText + "\n");
           console.log('thrownError: ' + thrownError + "\n");
+          panel.failed_get_ensp_length[ensp] = 1;
         }
     });
   },
@@ -1131,6 +1160,10 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     var sift_details = '';
     var sift_count   = 0;
 
+    var sift_sg = {};
+        sift_sg['score_good'] = 'sift_t_sg';
+        sift_sg['score_bad']  = 'sift_d_sg';
+
     $.each(data,function (index, result) {
       if (result.sift) {
 
@@ -1168,20 +1201,38 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
         sift_details += '<tr><td style="border-color:'+sift_colour+'">'+var_id+'</td><td>'+var_pdb+'</td><td>'+var_ensp+'</td>'+
           '<td>'+sift_residues+'</td><td><div class="score '+sift_class+'">'+sift_score+'</div></td>'+
           '<td><span class="pdb_feature_entry float_left view_disabled" id="sift_'+result.id+'_cb" data-value="'+sift_coords+'"'+
-          ' data-group="sift_group" data-name="'+result.id+'" data-colour="'+sift_colour+'"></span></td></tr>';
+          ' data-group="sift_group" data-name="'+result.id+'" data-colour="'+sift_colour+'" data-sg="'+sift_sg[sift_class]+'"></span></td></tr>';
         
         sift_count++;
       }
     });
 
     // Legend
-    var legend = '<div style="font-size:10px;white-space:nowrap;margin-bottom:5px;margin-left:5px">'+
+    /*var legend = '<div style="font-size:10px;white-space:nowrap;margin-bottom:5px;margin-left:5px">'+
                  '  <div style="float:left;margin-right:10px"><div class="_ht score score_good" style="max-width:none" title="Greater than or equal to 0.05">Tolerated</div></div>'+
                  '  <div style="float:left;margin-right:10px"><div class="_ht score score_bad" style="max-width:none" title="Less than 0.05">Deleterious</div></div>'+
                  '  <div style="clear:both"></div>'+
+                 '</div>';*/
+
+    var legend = '<div style="white-space:nowrap;margin-bottom:5px;margin-left:5px">'+
+                 '  <div class="float_left" style="margin-right:10px">'+
+                 '    <div class="float_left _ht score_legend_left score_good" title="Greater than or equal to 0.05">Tolerated</div>'+
+                 '    <div class="float_left score_legend_right">'+
+                 '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Tolerated SIFT Variant" id="sift_t_sg" data-super-group="sift_group"></div>'+
+                 '    </div>'+
+                 '    <div style="clear:both"></div>'+
+                 '  </div>'+
+                 '  <div class="float_left">'+
+                 '    <div class="float_left _ht score_legend_left score_bad" title="Less than 0.05">Deleterious</div>'+
+                 '    <div class="float_left score_legend_right">'+
+                 '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Deleterious SIFT Variant" id="sift_d_sg" data-super-group="sift_group"></div>'+
+                 '    </div>'+
+                 '    <div style="clear:both"></div>'+
+                 '  </div>'+
+                 '  <div style="clear:both"></div>'+
                  '</div>';
 
-    panel.render_selection_details('variant','sift', 'SIFT', sift_count, sift_details, 'Residues;Score', legend);
+    panel.render_selection_details('variant','sift', 'SIFT', sift_count, sift_details, 'Residues;Score', legend, 1);
   },
   parse_polyphen_results: function(data) {
     var panel = this;
@@ -1255,14 +1306,14 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     panel.render_selection_details('variant','polyphen', 'PolyPhen', polyphen_count, polyphen_details, 'Residues;Score', legend);
   },
 
-  render_selection_details: function (category,type,type_label,type_count,details,extra_col,legend) {
+  render_selection_details: function (category,type,type_label,type_count,details,extra_col,legend,has_subgroup) {
     var panel = this;
 
     var cat_id    = category+'_block';
     var td_label  = type+'_label';
     var row_id    = type+'_row';
     var cb_group  = type+'_group';
-   
+    var sg_flag   = (has_subgroup) ? ' data-has-sg="1"' : '';
 
     var label_id     = type+'_details';
     var label_id_div = label_id+'_div';
@@ -1287,7 +1338,7 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
         '<div>'+
         '  <h3 class="float_left" style="margin-bottom:0px">'+type_label+' ('+type_count+') </h3>'+
         '  <div class="float_right view_toggle closed" rel="'+label_id+'"></div>'+
-        '  <div class="float_right pdb_feature_group view_disabled" title="Click to highlight / hide '+type_label+' on the 3D viewer" id="'+cb_group+'"></div>'+
+        '  <div class="float_right pdb_feature_group view_disabled" title="Click to highlight / hide '+type_label+' on the 3D viewer" id="'+cb_group+'"'+sg_flag+'></div>'+
         '  <div style="clear:both"></div>'+
         '</div>'+
         '<div class="'+label_id+'">'+

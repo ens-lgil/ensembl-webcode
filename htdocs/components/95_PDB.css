@@ -65,6 +65,25 @@ div.cb {
 .float_left  { float:left; }
 .float_right { float:right; }
 
+
+.score_legend_left {
+  color: white;
+  text-align: center;
+  padding: 3px 4px 0 4px;
+  height:18px;
+  border-top-left-radius: 6px;
+  border-bottom-left-radius: 6px;
+}
+.score_legend_right {
+  border-top:1px solid #CCC;
+  border-right:1px solid #CCC;
+  border-bottom:1px solid #CCC;
+  padding: 1px 0px 0px 0px;
+  height:18px;
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+}
+
 .view_enabled {
  background-image: url(/i/16/eye.png);
  display: inline-block;
