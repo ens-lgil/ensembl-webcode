@@ -100,11 +100,40 @@ sub content {
 
   <div style="margin-bottom:300px">
 
-    <div id="litemol_canvas" style="float:left;position:relative;height:600px;width:800px;padding-bottom:30px">
-      <!-- Canvas for PDB LiteMol-->
+    <div style="float:left;position:relative;height:600px;width:800px">
+      <div class="view_spinner" style="display:none"></div>
+      <div id="litemol_canvas" style="height:600px;width:800px">
+        <!-- Canvas for PDB LiteMol-->
+      </div>
     </div>
 
     <div id="litemol_buttons" style="float:left;margin-left:20px;display:none">
+      <div>
+        <div rel="viewer_help" class="float_left view_toggle viewer_btn viewer_helper_btn closed" title="Click to toggle the 3D Viewer Help">
+          <span>3D Viewer Help</span>
+        </div>
+        <div class="float_left viewer_btn viewer_reset_btn left-margin">
+          <span>Reset viewer</span>
+        </div>
+        <div style="clear:both"></div>
+      </div>
+
+      <div id="viewer_help_div" style="display:none">
+          <table> 
+            <thead>
+              <tr>
+                <th>Action</th><th>Mouse</th><th>Touchscreen</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Rotate</td><td>Left click + drag</td><td>One finger touch</td></tr>
+              <tr><td>Zoom</td><td>Right click + drag</td><td>Pinch</td></tr>
+              <tr><td>Move</td><td>Middle click + drag</td><td>Two finger touch</td></tr>
+              <tr><td>Slab</td><td>Mouse wheel</td><td>Three finger touch</td></tr>
+            </tbody>
+        </table>
+      </div>
+
       <table class="ss pdb_markup">
         <thead>
           <tr><th class="pdb_category"><span id="mapping_ensp"></span> - <span id="mapping_pdb"></span> mapping</th></tr>
@@ -116,14 +145,16 @@ sub content {
               <div>
                 <div>
                   <h3 class="float_left" style="margin-bottom:0px">Ensembl-PDBe mapping coverage</h3>
-                  <div class="float_right view_toggle open" rel="mapping_details"></div>
+                  <div class="float_right view_toggle view_toggle_btn open" rel="mapping_details"></div>
                   <div class="float_right pdb_feature_group view_enabled" title="Click to highlight / hide ENSP-PDB mapping coverage on the 3D viewer" id="mapping_group"></div>
                   <div style="clear:both"></div>
                 </div>
                 <div class="mapping_details">
                   <div id="mapping_details_div" class="pdb_features_container toggleable" style="padding-top:5px">
                     <table class="pdb_features">
-                      <thead><tr><th>Label</th><th>PDB coords</th><th>ENSP coords</th><th></th></tr></thead>
+                      <thead>
+                        <tr><th>Label</th><th class="location _ht" title="Position in the selected PDB model"><span>PDB</span></th><th class="location _ht" title="Position in the selected En     sembl protein"><span>ENSP</span></th><th></th></tr>
+                      </thead>
                       <tbody>
                         <tr>
                           <td style="border-color:#DDD">Coverage</td><td id="mapping_pdb_pos"></td><td id="mapping_ensp_pos"></td>
@@ -173,15 +204,17 @@ sub content {
             <td id="variant_block">
               <div>
                 <div>
-                  <h3 class="float_left" style="margin-bottom:0px">Variant ($var_id)</h3>
-                  <div class="float_right view_toggle open" rel="var_details"></div>
+                  <h3 class="float_left" style="margin-bottom:0px">Variant $var_id</h3>
+                  <div class="float_right view_toggle view_toggle_btn open" rel="var_details"></div>
                   <div class="float_right pdb_feature_group view_enabled" title="Click to highlight / hide variant on the 3D viewer" id="variant_group"></div>
                   <div style="clear:both"></div>
                 </div>
                 <div class="var_details">
                   <div id="var_details_div" class="pdb_features_container toggleable" style="padding-top:5px">
                     <table class="pdb_features">
-                      <thead><tr><th>ID</th><th>PDB coords</th><th>ENSP coords</th><th></th></tr></thead>
+                      <thead>
+                        <tr><th>ID</th><th class="location _ht" title="Position in the selected PDB model"><span>PDB</span></th><th class="location _ht" title="Position in the selected En         sembl protein"><span>ENSP</span></th><th></th></tr>
+                      </thead>
                       <tbody>
                         <tr>
                           <td style="border-color:red">$var_id</td><td id="var_pos_pdb"></td><td id="var_pos_ensp"></td>

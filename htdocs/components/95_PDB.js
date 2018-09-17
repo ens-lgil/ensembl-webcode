@@ -23,12 +23,23 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
 
 //    $.getScript('http://www.ebi.ac.uk/~lgil/tests/3d/popup/litemol-custom-theme.js');
     //this.elLk.target = this.el.append('<div id="pdb">');
+
+    this.species = 'Homo_sapiens';    
+
     this.rest_url_root    = 'https://rest.ensembl.org/';
-    this.rest_var_url     = this.rest_url_root+'variation/human/';
-    this.rest_overlap_url = this.rest_url_root+'overlap/region/human/';
+    this.rest_var_url     = this.rest_url_root+'variation/'+this.species+'/';
+    this.rest_overlap_url = this.rest_url_root+'overlap/region/'+this.species+'/';
     this.rest_pr_url      = this.rest_url_root+'overlap/translation/';
     this.rest_lookup_url  = this.rest_url_root+'lookup/id/';
     this.rest_pdbe_url    = 'https://www.ebi.ac.uk/pdbe/api/pdb/entry/molecules/';
+
+    
+    this.protein_sources = { 
+                             'Pfam'   : 'http://pfam.xfam.org/family/',
+                             'PRINTS' : 'https://www.ebi.ac.uk/interpro/signature/',
+                             'Gene3D' : 'http://gene3d.biochem.ucl.ac.uk/Gene3D/search?mode=protein&sterm='
+                           };
+
 
     this.hexa_to_rgb = { 
                          'red'        : {r:255, g:0,   b:0},
@@ -65,7 +76,8 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
     this.pdb_struct_asym;
     this.pdb_chain_struc_entity = new Object();
 
-    this.details_header = '<th>ID</th><th>PDB coords</th><th>ENSP coords</th>';
+    this.details_header = '<th>ID</th><th class="location _ht" title="Position in the selected PDB model"><span>PDB</span></th><th class="location _ht" title="Position in the selected Ensembl protein"><span>ENSP</span></th>';
+
 
     //$.getScript('/pdbe/angular.1.4.7.min.js');//, function () {
     //$.getScript('/pdbe/pdb.component.library.min-1.0.0.js');//, function () {
@@ -147,21 +159,43 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
         $(this).toggleClass('open closed');
       });
 
+      // Reset the viewer
+      $(document).on('click', '.viewer_reset_btn', function() {
+        $('.view_spinner').show();
+        // Needed to show the spinner
+        setTimeout(function(){ 
+          // Reset right hand menu
+          panel.setDefaultHighlighting();
+          // Reset to default view (like the "Reset" button in the viewer
+          panel.liteMolScope.LiteMolComponent.Bootstrap.Command.Visual.ResetScene.dispatch(panel.liteMolScope.LiteMolComponent.plugin.context, void 0);
+          // Reset to default highlighting
+          panel.selectedFeatureGroupsToHighlight();
+          $('.view_spinner').hide();
+        }, 20);
+      });
     });
   },
 
+
+  setDefaultHighlighting: function() {
+    var panel = this;
+    
+    $('.view_enabled').switchClass('view_enabled','view_disabled');
+    /*$.each(['.pdb_feature_group', '.pdb_feature_subgroup', '.pdb_feature_entry'], function(i,classname) {
+      $(classname).switchClass('view_enabled','view_disabled');
+    });*/
+
+    // Check default options
+    $('#mapping_group').switchClass('view_disabled','view_enabled');
+    if (panel.var_id) {
+      $('#variant_group').switchClass('view_disabled','view_enabled');
+    }
+  }, 
  
   selectPDBEntry: function(pdb_id) {
     var panel = this;
 
-    $('.pdb_feature_entry').switchClass('view_enabled','view_disabled');
-
-    // Check default options
-    $('#mapping_group').switchClass('view_disabled','view_enabled');
-    //document.getElementById("mapping_cb").checked = true;
-    if (panel.var_id) {
-      $('#variant_group').switchClass('view_disabled','view_enabled');
-    }
+    panel.setDefaultHighlighting();
 
     if (pdb_id && pdb_id != '-') {
       var sel = $('#pdb_list').find('option:selected');
@@ -172,7 +206,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
       panel.pdb_hit_start = Number(sel.attr('data-hit-start'));
       console.log("PDB coords of "+pdb_id+" (on ENSP): "+panel.pdb_start+'-'+panel.pdb_end);
 
-      $('#mapping_ensp').html('<a href="/Homo_sapiens/Transcript/Summary?t='+panel.ensp_id+'" style="color:white">'+panel.ensp_id+'</a>');
+      $('#mapping_ensp').html('<a href="/'+panel.species+'/Transcript/Summary?t='+panel.ensp_id+'" style="color:white">'+panel.ensp_id+'</a>');
       $('#mapping_pdb').html('<a href="https://www.ebi.ac.uk/pdbe/entry/pdb/'+pdb_id+'" rel="external" style="color:white">'+pdb_id.toUpperCase()+'</a>');
 
 
@@ -215,9 +249,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
       // Load the right hand side menu
       if (panel.ensp_id) {
         panel.get_exon_data(panel.ensp_id); // Might need to move it into the #ensp_list change block
-        panel.get_protein_feature_data(panel.ensp_id,'Pfam');
-        panel.get_protein_feature_data(panel.ensp_id,'PRINTS');
-        panel.get_protein_feature_data(panel.ensp_id,'Gene3D');
+        panel.get_protein_feature_data(panel.ensp_id);
         panel.get_sift_polyphen_data(panel.ensp_id);
       }
     }
@@ -353,7 +385,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
     var theme_default = LiteMolPluginInstance.CustomTheme.createTheme(model_default.props.model, coloring_default);
   
     // instead of "polymer-visual", "model" or any valid ref can be used: all "child" visuals will be colored.
-    LiteMolPluginInstance.CustomTheme.applyTheme(this.liteMolScope.LiteMolComponent.plugin, 'polymer-visual', theme_default);
+    LiteMolPluginInstance.CustomTheme.applyTheme(panel.liteMolScope.LiteMolComponent.plugin, 'polymer-visual', theme_default);
 
     // List the PDB struct_asyms mapped to the ENSP
     var pdb_chain_ids = ['A'];
@@ -1058,7 +1090,7 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
         // Colour
         var hexa_colour = panel.get_hexa_colour(exon_count, exon_in_pdb_count);
 
-        var exon_label = "Exon "+exon_number;
+        var exon_label = '<a href="/'+panel.species+'/Transcript/Exons?t='+panel.ensp_id+'">Exon '+exon_number+'</a>';
 
         var exon_coords = exon_pdb_start+','+exon_pdb_end;
 
@@ -1076,14 +1108,30 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     }
   },
 
-  get_protein_feature_data: function(ensp_id,type) {
+  get_protein_feature_data: function(ensp_id) {
     var panel = this;
 
     $.ajax({
-        url: panel.rest_pr_url+ensp_id+'?feature=protein_feature;type='+type,
+        url: panel.rest_pr_url+ensp_id+'?feature=protein_feature',        
         method: "GET",
         contentType: "application/json; charset=utf-8",
         success: function (data) {
+          if (!data.error) {
+            var data_per_type = {};
+            $.each(data, function(index,item) {
+              if (data_per_type[item.type]) {
+                data_per_type[item.type].push(item);
+              }
+              else {
+                data_per_type[item.type] = [item];
+              }
+            });
+            $.each(panel.protein_sources, function(type, url) {
+              if (data_per_type[type]) {
+                panel.parse_protein_feature_results(data_per_type[type],type);
+              }
+            });
+          }
           panel.parse_protein_feature_results(data,type);
         },
         error: function (xhRequest, ErrorText, thrownError) {
@@ -1119,8 +1167,16 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
         var hexa_colour = panel.get_hexa_colour(index, data_size);
 
         var pf_coords = pf_pdb_start+','+pf_pdb_end;
+
+        
+        var pf_id = result.id;
+        if (panel.protein_sources[type]) {
+          var pf_url = panel.protein_sources[type];
+              pf_url += (type == 'Gene3D') ? panel.ensp_id : result.id;
+          pf_id = '<a href="'+pf_url+'" rel="external">'+result.id+'</a>';
+        }
  
-        pf_details += '<tr><td style="border-color:'+hexa_colour+'">'+result.id+'</td>'+
+        pf_details += '<tr><td style="border-color:'+hexa_colour+'">'+pf_id+'</td>'+
          '<td>'+pf_pdb_start+'-'+pf_pdb_end+'</td><td>'+result.start+'-'+result.end+'</td>'+
          '<td><span class="pdb_feature_entry float_left view_disabled" id="'+type+'_cb" data-value="'+pf_coords+'"'+
          ' data-group="'+lc_type+'_group" data-name="'+result.id+'" data-colour="'+hexa_colour+'"></span></td></tr>';
@@ -1160,9 +1216,9 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     var sift_details = '';
     var sift_count   = 0;
 
-    var sift_sg = {};
-        sift_sg['score_good'] = 'sift_t_sg';
-        sift_sg['score_bad']  = 'sift_d_sg';
+    var sift_sg = {'score_good' : 'sift_1_sg', 'score_bad' : 'sift_2_sg'};
+
+    var sift_categories = {};
 
     $.each(data,function (index, result) {
       if (result.sift) {
@@ -1196,6 +1252,8 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
           sift_colour = 'red';
         }
 
+        sift_categories[sift_class] = 1;
+
         var var_id = panel.add_var_link(result.id);
 
         sift_details += '<tr><td style="border-color:'+sift_colour+'">'+var_id+'</td><td>'+var_pdb+'</td><td>'+var_ensp+'</td>'+
@@ -1208,29 +1266,27 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     });
 
     // Legend
-    /*var legend = '<div style="font-size:10px;white-space:nowrap;margin-bottom:5px;margin-left:5px">'+
-                 '  <div style="float:left;margin-right:10px"><div class="_ht score score_good" style="max-width:none" title="Greater than or equal to 0.05">Tolerated</div></div>'+
-                 '  <div style="float:left;margin-right:10px"><div class="_ht score score_bad" style="max-width:none" title="Less than 0.05">Deleterious</div></div>'+
-                 '  <div style="clear:both"></div>'+
-                 '</div>';*/
-
-    var legend = '<div style="white-space:nowrap;margin-bottom:5px;margin-left:5px">'+
-                 '  <div class="float_left" style="margin-right:10px">'+
-                 '    <div class="float_left _ht score_legend_left score_good" title="Greater than or equal to 0.05">Tolerated</div>'+
-                 '    <div class="float_left score_legend_right">'+
-                 '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Tolerated SIFT Variant" id="sift_t_sg" data-super-group="sift_group"></div>'+
-                 '    </div>'+
-                 '    <div style="clear:both"></div>'+
-                 '  </div>'+
-                 '  <div class="float_left">'+
-                 '    <div class="float_left _ht score_legend_left score_bad" title="Less than 0.05">Deleterious</div>'+
-                 '    <div class="float_left score_legend_right">'+
-                 '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Deleterious SIFT Variant" id="sift_d_sg" data-super-group="sift_group"></div>'+
-                 '    </div>'+
-                 '    <div style="clear:both"></div>'+
-                 '  </div>'+
-                 '  <div style="clear:both"></div>'+
-                 '</div>';
+    var legend = '<div class="pdb_legend">';
+    if (sift_categories['score_good']) {
+      legend += '  <div class="float_left" style="margin-right:10px">'+
+                '    <div class="float_left _ht score_legend_left score_good" title="Greater than or equal to 0.05">Tolerated</div>'+
+                '    <div class="float_left score_legend_right">'+
+                '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Tolerated SIFT Variant" id="sift_1_sg" data-super-group="sift_group"></div>'+
+                '    </div>'+
+                '    <div style="clear:both"></div>'+
+                '  </div>';
+    }
+    if (sift_categories['score_bad']) {
+      legend += '  <div class="float_left">'+
+                '    <div class="float_left _ht score_legend_left score_bad" title="Less than 0.05">Deleterious</div>'+
+                '    <div class="float_left score_legend_right">'+
+                '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Deleterious SIFT Variant" id="sift_2_sg" data-super-group="sift_group"></div>'+
+                '    </div>'+
+                '    <div style="clear:both"></div>'+
+                '  </div>';
+    }
+    legend += '  <div style="clear:both"></div>'+
+              '</div>';
 
     panel.render_selection_details('variant','sift', 'SIFT', sift_count, sift_details, 'Residues;Score', legend, 1);
   },
@@ -1243,6 +1299,15 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
 
     var polyphen_details = '';
     var polyphen_count   = 0;
+
+    var polyphen_sg = {
+          'score_good'    : 'polyphen_1_sg',
+          'score_ok'      : 'polyphen_2_sg',
+          'score_bad'     : 'polyphen_3_sg',
+          'score_neutral' : 'polyphen_4_sg'
+       };
+
+    var polyphen_categories = {};
 
     $.each(data,function (index, result) {
       if (result.polyphen) {
@@ -1282,28 +1347,72 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
           polyphen_class  = 'score_good';
           polyphen_colour = 'green';
         }
+       
+        polyphen_categories[polyphen_class] = 1;
 
         var var_id = panel.add_var_link(result.id);
 
         polyphen_details += '<tr><td style="border-color:'+polyphen_colour+'">'+var_id+'</td><td>'+var_pdb+'</td><td>'+var_ensp+'</td>'+
           '<td>'+polyphen_residues+'</td><td><div class="score '+polyphen_class+'">'+polyphen_score+'</div></td>'+
           '<td><span class="pdb_feature_entry float_left view_disabled" id="polyphen_'+result.id+'_cb" data-value="'+polyphen_coords+'"'+
-          ' data-group="polyphen_group" data-name="'+result.id+'" data-colour="'+polyphen_colour+'"></span></td></tr>';
+          ' data-group="polyphen_group" data-name="'+result.id+'" data-colour="'+polyphen_colour+'" data-sg="'+polyphen_sg[polyphen_class]+'"></span></td></tr>';
         
         polyphen_count++;
       }
     });
 
     // Legend
-    var legend = '<div style="font-size:10px;white-space:nowrap;margin-bottom:5px;margin-left:5px">'+
+/*    var legend = '<div style="font-size:10px;white-space:nowrap;margin-bottom:5px;margin-left:5px">'+
                  '  <div style="float:left;margin-right:10px"><div class="_ht score score_good" style="max-width:none" title="Less than or equal to 0.446">Benign</div></div>'+
                  '  <div style="float:left;margin-right:10px"><div class="_ht score score_ok" style="max-width:none" title="Greater than 0.446 and less than or equal to 0.908">Possibly Damaging</div></div>'+
                  '  <div style="float:left;margin-right:10px"><div class="_ht score score_bad" style="max-width:none" title="Greater than 0.908">Probably Damaging</div></div>'+
                  '  <div style="float:left"><div class="_ht score score_neutral" style="max-width:none" title="Unknown">Unknown</div></div>'+
                  '  <div style="clear:both"></div>'+
-                 '</div>';
+                 '</div>';*/
 
-    panel.render_selection_details('variant','polyphen', 'PolyPhen', polyphen_count, polyphen_details, 'Residues;Score', legend);
+    var legend = '<div class="pdb_legend">';
+    if (polyphen_categories['score_good']) {
+      legend += '  <div class="float_left" style="margin-right:10px">'+
+                '    <div class="float_left _ht score_legend_left score_good" title="Less than or equal to 0.446">Benign</div>'+
+                '    <div class="float_left score_legend_right">'+
+                '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Benign PolyPhen Variant" id="polyphen_1_sg" data-super-group="polyphen_group"></div>'+
+                '    </div>'+
+                '    <div style="clear:both"></div>'+
+                '  </div>';
+    }
+    if (polyphen_categories['score_ok']) {
+      legend += '  <div class="float_left" style="margin-right:10px">'+
+                '    <div class="float_left _ht score_legend_left score_ok" title="Greater than 0.446 and less than or equal to 0.908">Possibly Damaging</div>'+
+                '    <div class="float_left score_legend_right">'+
+                '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Possibly Damaging PolyPhen Variant" id="polyphen_2_sg" data-super-group="polyphen_group"></div>'+
+                '    </div>'+
+                '    <div style="clear:both"></div>'+
+                '  </div>';
+    }
+    if (polyphen_categories['score_bad']) {
+      legend += '  <div class="float_left" style="margin-right:10px">'+
+                '    <div class="float_left _ht score_legend_left score_bad" title="Greater than 0.908">Probably Damaging</div>'+
+                '    <div class="float_left score_legend_right">'+
+                '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Probably Damaging PolyPhen Variant" id="polyphen_3_sg" data-super-group="polyphen_group"></div>'+
+                '    </div>'+
+                '    <div style="clear:both"></div>'+
+                '  </div>';
+    }
+    if (polyphen_categories['score_neutral']) {
+      legend += '  <div class="float_left">'+
+                '    <div class="float_left _ht score_legend_left score_neutral" title="Unknown">Unknown</div>'+
+                '    <div class="float_left score_legend_right">'+
+                '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Unknown PolyPhen Variant" id="polyphen_4_sg" data-super-group="polyphen_group"></div>'+
+                '    </div>'+
+                '    <div style="clear:both"></div>'+
+                '  </div>';
+    }
+     
+    legend += '  <div style="clear:both"></div>'+
+              '</div>';
+
+
+    panel.render_selection_details('variant','polyphen', 'PolyPhen', polyphen_count, polyphen_details, 'Residues;Score', legend, 1);
   },
 
   render_selection_details: function (category,type,type_label,type_count,details,extra_col,legend,has_subgroup) {
@@ -1336,9 +1445,10 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
       }
       label.html(
         '<div>'+
-        '  <h3 class="float_left" style="margin-bottom:0px">'+type_label+' ('+type_count+') </h3>'+
-        '  <div class="float_right view_toggle closed" rel="'+label_id+'"></div>'+
+        '  <h3 class="float_left" style="margin-bottom:0px">'+type_label+'</h3>'+
+        '  <div class="float_right view_toggle view_toggle_btn closed" rel="'+label_id+'"></div>'+
         '  <div class="float_right pdb_feature_group view_disabled" title="Click to highlight / hide '+type_label+' on the 3D viewer" id="'+cb_group+'"'+sg_flag+'></div>'+
+        '  <div class="float_right view_badge">'+type_count+'</div>'+
         '  <div style="clear:both"></div>'+
         '</div>'+
         '<div class="'+label_id+'">'+
@@ -1441,7 +1551,8 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
   },
 
   add_var_link: function(var_id) {
-    return '<a href="/Homo_sapiens/Variation/Explore?v='+var_id+'" target="_blank">'+var_id+'</a>';
+    var panel = this;
+    return '<a href="/'+panel.species+'/Variation/Explore?v='+var_id+'" target="_blank">'+var_id+'</a>';
   },
 
 
