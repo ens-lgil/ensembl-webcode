@@ -39,7 +39,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
                              'PRINTS' : 'https://www.ebi.ac.uk/interpro/signature/',
                              'Gene3D' : 'http://gene3d.biochem.ucl.ac.uk/Gene3D/search?mode=protein&sterm='
                            };
-
+    this.protein_features = { 'pdb' : [] };
 
     this.hexa_to_rgb = { 
                          'red'        : {r:255, g:0,   b:0},
@@ -181,9 +181,6 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
     var panel = this;
     
     $('.view_enabled').switchClass('view_enabled','view_disabled');
-    /*$.each(['.pdb_feature_group', '.pdb_feature_subgroup', '.pdb_feature_entry'], function(i,classname) {
-      $(classname).switchClass('view_enabled','view_disabled');
-    });*/
 
     // Check default options
     $('#mapping_group').switchClass('view_disabled','view_enabled');
@@ -399,7 +396,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
     pdb_feature_entry_array.each(function(index, el) {
       if (el.classList.contains('pdb_var_entry')) {
         var_index = index;
-        return true;
+        return false;
       }
     });
     if (var_index != '') {
@@ -598,14 +595,42 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
 
   get_pdb_by_ensp: function(ensp,display) {
     var panel = this;
+    panel.protein_features = { 'pdb' : [] };
 
     $.ajax({
-      url: panel.rest_pr_url+ensp+'?feature=protein_feature&type=',
+      //url: panel.rest_pr_url+ensp+'?feature=protein_feature&type=',
+      url: panel.rest_pr_url+ensp+'?feature=protein_feature',
       method: "GET",
       contentType: "application/json; charset=utf-8",
       success: function (data) {
-        panel.get_pdb_chain_struc_entity(data); 
-        panel.parse_pdb_results(data,ensp,display);
+        $.each(data, function(index,item) {
+          var type = item.type;
+///console.log("TYPE: "+type);
+          if (panel.protein_sources[type] || type == null) {
+            if (type == null) {
+              type = 'pdb';
+            }
+            if (panel.protein_features[type]) {
+              panel.protein_features[type].push(item);
+            }
+            else {
+              panel.protein_features[type] = [item];
+            }
+          }
+        });
+
+        // Filter out short PDB models
+        var tmp_pdb_list = [];
+        $.each(panel.protein_features['pdb'],function (index, result) {
+          var pdb_length = result.hit_end-result.hit_start+1;
+          if (pdb_length >= panel.mapping_min_length) {
+            tmp_pdb_list.push(result); 
+          }
+        });
+        panel.protein_features['pdb'] = tmp_pdb_list;
+
+        panel.get_pdb_chain_struc_entity(panel.protein_features['pdb']); 
+        panel.parse_pdb_results(panel.protein_features['pdb'],ensp,display);
       },
       error: function (xhRequest, ErrorText, thrownError) {
         console.log('ErrorText: ' + ErrorText + "\n");
@@ -624,46 +649,44 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
       var pdb_id = pdb_acc[0];
       if (jQuery.inArray(pdb_id,pdb_list) == -1) {
         pdb_list.push(pdb_id);
-        
-        $.ajax({
-          url: panel.rest_pdbe_url+pdb_id,
-          method: "GET",
-          //dataType: 'jsonp',
-          //contentType: "application/json; charset=utf-8",
-          contentType: 'text/plain',
-          success: function (pdb_data) {
-            $.each(pdb_data[pdb_id],function (i, pdb_result) {
-//console.log(">> "+pdb_id+": entity "+pdb_result.entity_id+" | molecule type "+pdb_result.molecule_type);
-              if (pdb_result.molecule_type!='polypeptide(L)') {
-                return true;
+      }
+    });
+
+    $.ajax({
+      type: "POST",
+      url: panel.rest_pdbe_url,
+      data: pdb_list.join(','),
+      //dataType: dataType,
+      contentType: 'text/plain',
+      success: function (pdb_data) {
+        $.each(pdb_data,function (pdb_id, pdb_results) {
+//          console.log("MODEL "+pdb_id);
+//          console.log(pdb_results);
+          $.each(pdb_results, function (index, pdb_result) {
+            var entity = pdb_result.entity_id;
+
+            if (pdb_result.molecule_type!='polypeptide(L)' || !entity) {
+              return true;
+            }
+
+            $.each(pdb_result.in_chains,function (j, chain) {
+              var struct_asym = pdb_result.in_struct_asyms[0];
+              if (pdb_result.in_struct_asyms[j] && j != 0) {
+                struct_asym = pdb_result.in_struct_asyms[j];
               }
-              var entity = pdb_result.entity_id;
-              if (entity) {
-                $.each(pdb_result.in_chains,function (j, chain) {
-                  var struct_asym = pdb_result.in_struct_asyms[0];
-                  if (pdb_result.in_struct_asyms[j] && j != 0) {
-                    struct_asym = pdb_result.in_struct_asyms[j];
-                  }
-                  
-                //$.each(pdb_result.in_struct_asyms,function (j, struct_asym) {
-                  if (!panel.pdb_chain_struc_entity[pdb_id]) { 
-                    panel.pdb_chain_struc_entity[pdb_id] = {};
-                  }
-                  panel.pdb_chain_struc_entity[pdb_id][chain] = { 'struct_asym_id': struct_asym, 'entity_id': entity};
-
+              if (!panel.pdb_chain_struc_entity[pdb_id]) {
+                panel.pdb_chain_struc_entity[pdb_id] = {};
+              }
+              panel.pdb_chain_struc_entity[pdb_id][chain] = { 'struct_asym_id': struct_asym, 'entity_id': entity };
 //console.log("CE - "+pdb_id+": Entity => "+entity+" | Chain => "+chain+" | Struct asym => "+struct_asym+" | Array: "+panel.pdb_chain_struc_entity[pdb_id][chain] );
-                });
-              }              
-            });     
-          },
-          error: function (xhRequest, ErrorText, thrownError) {
-            console.log('ErrorText: ' + ErrorText + "\n");
-            console.log('thrownError: ' + thrownError + "\n");
-          }
-
+            });
+          });
         });
-        console.log("Get struct_asym - entity");          
-      } 
+      },
+      error: function (xhRequest, ErrorText, thrownError) {
+        console.log('ErrorText: ' + ErrorText + "\n");
+        console.log('thrownError: ' + thrownError + "\n");
+      }
     });
   },
   
@@ -1016,7 +1039,7 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
       $.each(data,function (index, result) {
         if (panel.var_id == result.id) {
           panel.ensp_var_pos[ensp] = result.start+'-'+result.end;
-          return true;
+          return false;
         }
       });
     }
@@ -1111,7 +1134,7 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
   get_protein_feature_data: function(ensp_id) {
     var panel = this;
 
-    $.ajax({
+    /*$.ajax({
         url: panel.rest_pr_url+ensp_id+'?feature=protein_feature',        
         method: "GET",
         contentType: "application/json; charset=utf-8",
@@ -1132,60 +1155,61 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
               }
             });
           }
-          panel.parse_protein_feature_results(data,type);
         },
         error: function (xhRequest, ErrorText, thrownError) {
           console.log('ErrorText: ' + ErrorText + "\n");
           console.log('thrownError: ' + thrownError + "\n");
         }
+    });*/
+    $.each(panel.protein_sources, function(type, url) {
+      if (panel.protein_features[type]) {
+        panel.parse_protein_feature_results(panel.protein_features[type],type);
+      }
     });
-    console.log("Exon coordinates done");
   },
   parse_protein_feature_results: function(data,type) {
     var panel = this;
-    if (!data.error) {
-      var pf_details = '';
-      var pf_count   = 0;
 
-      var lc_type = type.toLowerCase();
+    var pf_details = '';
+    var pf_count   = 0;
+
+    var lc_type = type.toLowerCase();
      
-      data.sort(function(a,b) {
-        return a.start - b.start;
-      });
-
-      var data_size = Object.keys(data).length;
+    data.sort(function(a,b) {
+      return a.start - b.start;
+    });
  
-      $.each(data,function (index, result) {
-        var pf_pdb_coords = panel.ensp_to_pdb_coords(result.start, result.end);
-        if (pf_pdb_coords.length == 0) {
-          return true;
-        }
-        var pf_pdb_start = pf_pdb_coords[0];
-        var pf_pdb_end   = pf_pdb_coords[1];
-
-        // Colour
-        var hexa_colour = panel.get_hexa_colour(index, data_size);
-
-        var pf_coords = pf_pdb_start+','+pf_pdb_end;
-
-        
-        var pf_id = result.id;
-        if (panel.protein_sources[type]) {
-          var pf_url = panel.protein_sources[type];
-              pf_url += (type == 'Gene3D') ? panel.ensp_id : result.id;
-          pf_id = '<a href="'+pf_url+'" rel="external">'+result.id+'</a>';
-        }
+    var data_size = Object.keys(data).length;
  
-        pf_details += '<tr><td style="border-color:'+hexa_colour+'">'+pf_id+'</td>'+
-         '<td>'+pf_pdb_start+'-'+pf_pdb_end+'</td><td>'+result.start+'-'+result.end+'</td>'+
-         '<td><span class="pdb_feature_entry float_left view_disabled" id="'+type+'_cb" data-value="'+pf_coords+'"'+
-         ' data-group="'+lc_type+'_group" data-name="'+result.id+'" data-colour="'+hexa_colour+'"></span></td></tr>';
-        
-        pf_count ++;
-      });
+    $.each(data,function (index, result) {
+      var pf_pdb_coords = panel.ensp_to_pdb_coords(result.start, result.end);
+      if (pf_pdb_coords.length == 0) {
+        return true;
+      }
+      var pf_pdb_start = pf_pdb_coords[0];
+      var pf_pdb_end   = pf_pdb_coords[1];
 
-      panel.render_selection_details('protein', lc_type, type, pf_count, pf_details);
-    }
+      // Colour
+      var hexa_colour = panel.get_hexa_colour(index, data_size);
+
+      var pf_coords = pf_pdb_start+','+pf_pdb_end;
+       
+      var pf_id = result.id;
+      if (panel.protein_sources[type]) {
+        var pf_url = panel.protein_sources[type];
+            pf_url += (type == 'Gene3D') ? panel.ensp_id : result.id;
+        pf_id = '<a href="'+pf_url+'" rel="external">'+result.id+'</a>';
+      }
+ 
+      pf_details += '<tr><td style="border-color:'+hexa_colour+'">'+pf_id+'</td>'+
+       '<td>'+pf_pdb_start+'-'+pf_pdb_end+'</td><td>'+result.start+'-'+result.end+'</td>'+
+       '<td><span class="pdb_feature_entry float_left view_disabled" id="'+type+'_cb" data-value="'+pf_coords+'"'+
+       ' data-group="'+lc_type+'_group" data-name="'+result.id+'" data-colour="'+hexa_colour+'"></span></td></tr>';
+
+      pf_count ++;
+    });
+
+    panel.render_selection_details('protein', lc_type, type, pf_count, pf_details);
   },
 
   get_sift_polyphen_data: function(ensp_id) {
@@ -1269,7 +1293,7 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     var legend = '<div class="pdb_legend">';
     if (sift_categories['score_good']) {
       legend += '  <div class="float_left" style="margin-right:10px">'+
-                '    <div class="float_left _ht score_legend_left score_good" title="Greater than or equal to 0.05">Tolerated</div>'+
+                '    <div class="float_left _ht score_legend_left score_bg_good" title="Greater than or equal to 0.05">Tolerated</div>'+
                 '    <div class="float_left score_legend_right">'+
                 '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Tolerated SIFT Variant" id="sift_1_sg" data-super-group="sift_group"></div>'+
                 '    </div>'+
@@ -1278,7 +1302,7 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     }
     if (sift_categories['score_bad']) {
       legend += '  <div class="float_left">'+
-                '    <div class="float_left _ht score_legend_left score_bad" title="Less than 0.05">Deleterious</div>'+
+                '    <div class="float_left _ht score_legend_left score_bg_bad" title="Less than 0.05">Deleterious</div>'+
                 '    <div class="float_left score_legend_right">'+
                 '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Deleterious SIFT Variant" id="sift_2_sg" data-super-group="sift_group"></div>'+
                 '    </div>'+
@@ -1362,18 +1386,10 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     });
 
     // Legend
-/*    var legend = '<div style="font-size:10px;white-space:nowrap;margin-bottom:5px;margin-left:5px">'+
-                 '  <div style="float:left;margin-right:10px"><div class="_ht score score_good" style="max-width:none" title="Less than or equal to 0.446">Benign</div></div>'+
-                 '  <div style="float:left;margin-right:10px"><div class="_ht score score_ok" style="max-width:none" title="Greater than 0.446 and less than or equal to 0.908">Possibly Damaging</div></div>'+
-                 '  <div style="float:left;margin-right:10px"><div class="_ht score score_bad" style="max-width:none" title="Greater than 0.908">Probably Damaging</div></div>'+
-                 '  <div style="float:left"><div class="_ht score score_neutral" style="max-width:none" title="Unknown">Unknown</div></div>'+
-                 '  <div style="clear:both"></div>'+
-                 '</div>';*/
-
     var legend = '<div class="pdb_legend">';
     if (polyphen_categories['score_good']) {
       legend += '  <div class="float_left" style="margin-right:10px">'+
-                '    <div class="float_left _ht score_legend_left score_good" title="Less than or equal to 0.446">Benign</div>'+
+                '    <div class="float_left _ht score_legend_left score_bg_good" title="Less than or equal to 0.446">Benign</div>'+
                 '    <div class="float_left score_legend_right">'+
                 '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Benign PolyPhen Variant" id="polyphen_1_sg" data-super-group="polyphen_group"></div>'+
                 '    </div>'+
@@ -1382,7 +1398,7 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     }
     if (polyphen_categories['score_ok']) {
       legend += '  <div class="float_left" style="margin-right:10px">'+
-                '    <div class="float_left _ht score_legend_left score_ok" title="Greater than 0.446 and less than or equal to 0.908">Possibly Damaging</div>'+
+                '    <div class="float_left _ht score_legend_left score_bg_ok" title="Greater than 0.446 and less than or equal to 0.908">Possibly Damaging</div>'+
                 '    <div class="float_left score_legend_right">'+
                 '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Possibly Damaging PolyPhen Variant" id="polyphen_2_sg" data-super-group="polyphen_group"></div>'+
                 '    </div>'+
@@ -1391,7 +1407,7 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     }
     if (polyphen_categories['score_bad']) {
       legend += '  <div class="float_left" style="margin-right:10px">'+
-                '    <div class="float_left _ht score_legend_left score_bad" title="Greater than 0.908">Probably Damaging</div>'+
+                '    <div class="float_left _ht score_legend_left score_bg_bad" title="Greater than 0.908">Probably Damaging</div>'+
                 '    <div class="float_left score_legend_right">'+
                 '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Probably Damaging PolyPhen Variant" id="polyphen_3_sg" data-super-group="polyphen_group"></div>'+
                 '    </div>'+
@@ -1400,7 +1416,7 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     }
     if (polyphen_categories['score_neutral']) {
       legend += '  <div class="float_left">'+
-                '    <div class="float_left _ht score_legend_left score_neutral" title="Unknown">Unknown</div>'+
+                '    <div class="float_left _ht score_legend_left score_bg_neutral" title="Unknown">Unknown</div>'+
                 '    <div class="float_left score_legend_right">'+
                 '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Unknown PolyPhen Variant" id="polyphen_4_sg" data-super-group="polyphen_group"></div>'+
                 '    </div>'+
