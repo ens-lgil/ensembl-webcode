@@ -128,7 +128,7 @@ sub content {
             <td id="mapping_block">
               <div>
                 <div>
-                  <h3 class="float_left" style="margin-bottom:0px">Ensembl-PDBe mapping coverage</h3>
+                  <h3 class="float_left" style="margin-bottom:0px">Ensembl-PDBe mapping</h3>
                   <div class="float_right view_toggle view_toggle_btn open" rel="mapping_details"></div>
                   <div class="float_right pdb_feature_group view_enabled" title="Click to highlight / hide ENSP-PDB mapping coverage on the 3D viewer" id="mapping_group"></div>
                   <div style="clear:both"></div>
