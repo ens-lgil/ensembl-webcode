@@ -11,6 +11,7 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
@@ -39,7 +40,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
                              'PRINTS' : 'https://www.ebi.ac.uk/interpro/signature/',
                              'Gene3D' : 'http://gene3d.biochem.ucl.ac.uk/Gene3D/search?mode=protein&sterm='
                            };
-    this.protein_features = { 'pdb' : [] };
+    this.protein_features = {};
 
     this.hexa_to_rgb = { 
                          'red'        : {r:255, g:0,   b:0},
@@ -60,6 +61,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
     this.var_cons;
     this.ensp_id;
 
+    this.ensp_list = [];
     this.ensp_pdb_list = {};
     this.ensp_var_pos  = {};
     this.ensp_length   = {};
@@ -99,17 +101,37 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
       // Transcript portal
       if ($("#ensp_id").length) {
         panel.ensp_id = $("#ensp_id").html();
-        panel.get_ens_protein_length(panel.ensp_id);
-        panel.get_pdb_list(panel.ensp_id,1);
+        panel.ensp_list.push(panel.ensp_id);
+        var pr_length = panel.get_ens_protein_length(panel.ensp_list);
+        //panel.get_pdb_list(panel.ensp_id,1);
+        panel.get_all_pdb_list();
       }
       // Variation portal
       else {
-        panel.get_var_data();
+        $.when(panel.get_var_data()).then(function(var_data) {
+          $.when(panel.get_ens_proteins_list(var_data)).then(function() {
+console.log("ENSP entries: "+panel.ensp_list.join(" | "));
+            if (panel.ensp_list.length) {
+              panel.get_all_pdb_list();
+            }
+            else {
+              panel.showNoData();
+            }
+          });
+        });
 
         $('#ensp_list').change(function () {
           panel.ensp_id = $(this).val();
-          if (panel.ensp_id && panel.ensp_id != '-') {
-            $(".var_pos").html(panel.ensp_var_pos[panel.ensp_id]);
+          if (panel.ensp_id) {
+            if (!panel.ensp_var_pos[panel.ensp_id]) {
+              $.when(panel.get_var_ensp_pos(panel.ensp_id)).then(function() {
+                $(".var_pos").html(panel.ensp_var_pos[panel.ensp_id]);
+              });
+            }
+            else {
+              $(".var_pos").html(panel.ensp_var_pos[panel.ensp_id]);
+            }
+            
             $("#var_ensp_id").html(panel.ensp_id);
             $("#variant_pos_info").show();
             panel.display_pdb_list(panel.ensp_id);
@@ -191,11 +213,13 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
  
   selectPDBEntry: function(pdb_id) {
     var panel = this;
+console.log(">>>>> STEP 13: Select PDB entry (selectPDBEntry) - start");
 
-    panel.setDefaultHighlighting();
+     panel.setDefaultHighlighting();
 
     if (pdb_id && pdb_id != '-') {
       var sel = $('#pdb_list').find('option:selected');
+
       panel.pdb_id        = pdb_id;
       panel.pdb_start     = Number(sel.attr('data-start'));
       panel.pdb_end       = Number(sel.attr('data-end'));
@@ -209,26 +233,40 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
 
       // Assign position to variant
       if (panel.var_id) {
-        var var_pos_ensp = panel.ensp_var_pos[panel.ensp_id].split('-');
-        var var_pdb_coords = panel.ensp_to_pdb_coords(var_pos_ensp[0],var_pos_ensp[1]);
+        var max_interval_iteration = 50;
+        var interval_iteration_count = 0;
+        var ensp_var_pos_interval = setInterval(function(){
+          if (panel.ensp_var_pos[panel.ensp_id] || interval_iteration_count == max_interval_iteration) {
+            var var_pos_ensp = panel.ensp_var_pos[panel.ensp_id].split('-');
+            var var_pdb_coords = panel.ensp_to_pdb_coords(var_pos_ensp[0],var_pos_ensp[1]);
 
-        $('#'+panel.var_id+'_cb').attr('data-value', var_pdb_coords[0]+','+var_pdb_coords[1]);
+            $('#'+panel.var_id+'_cb').attr('data-value', var_pdb_coords[0]+','+var_pdb_coords[1]);
 
-        // Special display for the stop_gained variants
-        if (panel.var_cons && (panel.var_cons == 'stop_gained' || panel.var_cons == 'frameshift_variant')) {
-          var var_pos_after_stop =  Number(var_pos_ensp[1]) + 1;
+            // Special display for the stop_gained variants
+            if (panel.var_cons && (panel.var_cons == 'stop_gained' || panel.var_cons == 'frameshift_variant')) {
+              var var_pos_after_stop =  Number(var_pos_ensp[1]) + 1;
+  
+              var altered_sequence = '<tr><td style="border-color:darkred">Altered/missing sequence</td>'+
+                '<td>from '+var_pdb_coords[0]+'</td><td>from '+var_pos_ensp[1]+'</td>'+
+                '<td><span class="pdb_feature_entry float_left view_enabled" id="'+panel.var_id+'_alt_cb" data-value="'+var_pos_after_stop+','+panel.pdb_end+'" data-group="variant_group" data-na     me="'+panel.var_id+'_alt" data-colour="darkred"></span></td></tr>';
+          
+              $('#var_details_div > table > tbody').append(altered_sequence);
+            }
 
-          var altered_sequence = '<tr><td style="border-color:darkred">Altered/missing sequence</td>'+
-            '<td>from '+var_pdb_coords[0]+'</td><td>from '+var_pos_ensp[1]+'</td>'+
-            '<td><span class="pdb_feature_entry float_left view_enabled" id="'+panel.var_id+'_alt_cb" data-value="'+var_pos_after_stop+','+panel.pdb_end+'" data-group="variant_group" data-na     me="'+panel.var_id+'_alt" data-colour="darkred"></span></td></tr>';
-        
-          $('#var_details_div > table > tbody').append(altered_sequence);
-        }
+            var var_pos_pdb = (var_pdb_coords[0] == var_pdb_coords[1]) ? var_pdb_coords[0] : var_pdb_coords[0]+'-'+var_pdb_coords[1];
+            $('#var_pos_pdb').html(var_pos_pdb);
+            var_pos_ensp = (var_pos_ensp[0] == var_pos_ensp[1]) ? var_pos_ensp[0] : var_pos_ensp[0]+'-'+var_pos_ensp[1];
+            $('#var_pos_ensp').html(var_pos_ensp);
 
-        var var_pos_pdb = (var_pdb_coords[0] == var_pdb_coords[1]) ? var_pdb_coords[0] : var_pdb_coords[0]+'-'+var_pdb_coords[1];
-        $('#var_pos_pdb').html(var_pos_pdb);
-        var_pos_ensp = (var_pos_ensp[0] == var_pos_ensp[1]) ? var_pos_ensp[0] : var_pos_ensp[0]+'-'+var_pos_ensp[1];
-        $('#var_pos_ensp').html(var_pos_ensp);
+            clearInterval(ensp_var_pos_interval);
+            console.log(">>>>> STEP 13a: Select PDB entry (selectPDBEntry) - ensp_var_pos ready | iterations: "+interval_iteration_count);
+          }
+          interval_iteration_count ++;
+        }, 100);
+      }
+      // DEBUG MSG
+      else {
+        console.log(">>>>> STEP 13b: Select PDB entry (selectPDBEntry) - done"); 
       }
 
       // Assign position to ENSP mapping
@@ -288,13 +326,12 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
           if (interval_iteration_count == max_interval_iteration) {
             console.log("Model loading takes too long!");
           }
-          else {
-            console.log("Model loading done! => "+interval_iteration_count);
-          }
           var timeout = (panel.var_id) ? 0 : 200;
-          setTimeout(function(){ panel.selectedFeatureGroupsToHighlight(); }, timeout);
+          setTimeout(function(){ panel.selectedFeatureGroupsToHighlight(); }, timeout)
+
           clearInterval(checkExist);
           checkExist = 0;
+          console.log(">>>>> STEP 14: Load 3D widget (load3DWidget) - done | iterations: "+interval_iteration_count);
         }
         interval_iteration_count ++;
       }, 100);
@@ -558,86 +595,83 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
     });
     return [residueDetails,specialResidueDetails];
   },
-  
- 
+
+
   ///// PDB data /////
+
+  get_all_pdb_list: function() {
+    var panel = this;
+    console.log(">>>>> STEP 08: Get all the PDB lists (get_all_pdb_list) - done");
+    $('#pdb_list_label').hide();
+    $('#pdb_list').hide();
+    $('#right_form').addClass('loader_small');
+    $.each(panel.ensp_list, function(i,ensp) {
+      if (ensp == panel.ensp_id) {
+console.log("SELECTED ENSP found: "+ensp);
+        panel.get_pdb_list(ensp,1);
+      }
+      else {
+        panel.get_pdb_list(ensp);
+      }
+    });
+  },
 
   get_pdb_list: function(ensp,display) {
     var panel = this;
-    $('#pdb_list_label').hide();
-    $('#pdb_list').hide(); 
-    $('#right_form').addClass('loader_small');
+    /*$('#pdb_list_label').hide();
+    $('#pdb_list').hide();
+    $('#right_form').addClass('loader_small');*/
 
-    // Transcript
-    if ($("#ensp_id").length) {
-      panel.get_pdb_by_ensp(ensp,display);
-    }
-    // Variant
-    else {
-      var var_pr_pos = 0;
-  
-      $.ajax({
-        url: panel.rest_pr_url+ensp+'?feature=transcript_variation;type='+panel.var_cons,
-        method: "GET",
-        contentType: "application/json; charset=utf-8",
-        success: function (data) {
-          panel.parse_tv_results(data,ensp);
-          panel.get_pdb_by_ensp(ensp,display);
-        },
-        error: function (xhRequest, ErrorText, thrownError) {
-          console.log('ErrorText: ' + ErrorText + "\n");
-          console.log('thrownError: ' + thrownError + "\n");
-        }
-      });
-      console.log("Variant Pr coord");
-    }
+    $.when(panel.get_pdb_by_ensp(ensp)).then(function() {
+
+console.log("  PDB LIST FOR "+ensp+": "+panel.protein_features[ensp]['pdb'].length);
+      if (panel.protein_features[ensp]['pdb'] && panel.protein_features[ensp]['pdb'].length !=0) {
+        $.when(panel.get_pdb_chain_struc_entity(panel.protein_features[ensp]['pdb'])).then(function() {
+          panel.parse_pdb_results(ensp,display);
+        });
+      }
+
+    });
+
   },
 
-  get_pdb_by_ensp: function(ensp,display) {
+  get_pdb_by_ensp: function(ensp) {
     var panel = this;
-    panel.protein_features = { 'pdb' : [] };
+    panel.protein_features[ensp] = { 'pdb' : [] };
 
-    $.ajax({
+    return $.ajax({
       //url: panel.rest_pr_url+ensp+'?feature=protein_feature&type=',
       url: panel.rest_pr_url+ensp+'?feature=protein_feature',
       method: "GET",
-      contentType: "application/json; charset=utf-8",
-      success: function (data) {
-        $.each(data, function(index,item) {
-          var type = item.type;
+      contentType: "application/json; charset=utf-8"
+    })
+    .done(function (data) {
+      $.each(data, function(index,item) {
+        var type = item.type;
 ///console.log("TYPE: "+type);
-          if (panel.protein_sources[type] || type == null) {
-            if (type == null) {
-              type = 'pdb';
+        if (panel.protein_sources[type] || type == null) {
+          if (type == null) {
+            var pdb_length = item.hit_end-item.hit_start+1;
+            if (pdb_length < panel.mapping_min_length) {
+              return true;
             }
-            if (panel.protein_features[type]) {
-              panel.protein_features[type].push(item);
-            }
-            else {
-              panel.protein_features[type] = [item];
-            }
+            type = 'pdb';
           }
-        });
-
-        // Filter out short PDB models
-        var tmp_pdb_list = [];
-        $.each(panel.protein_features['pdb'],function (index, result) {
-          var pdb_length = result.hit_end-result.hit_start+1;
-          if (pdb_length >= panel.mapping_min_length) {
-            tmp_pdb_list.push(result); 
+          if (panel.protein_features[ensp][type]) {
+            panel.protein_features[ensp][type].push(item);
           }
-        });
-        panel.protein_features['pdb'] = tmp_pdb_list;
+          else {
+            panel.protein_features[ensp][type] = [item];
+          }
+        }
+      });
 
-        panel.get_pdb_chain_struc_entity(panel.protein_features['pdb']); 
-        panel.parse_pdb_results(panel.protein_features['pdb'],ensp,display);
-      },
-      error: function (xhRequest, ErrorText, thrownError) {
-        console.log('ErrorText: ' + ErrorText + "\n");
-        console.log('thrownError: ' + thrownError + "\n");
-      }
+      console.log(">>>>> STEP 09: Get list of PDBs by ENSP (get_pdb_by_ensp) - done");
+    })
+    .fail(function (xhRequest, ErrorText, thrownError) {
+      console.log('ErrorText: ' + ErrorText + "\n");
+      console.log('thrownError: ' + thrownError + "\n");
     });
-    console.log("PDB list"); 
   },
 
   get_pdb_chain_struc_entity: function(data) {
@@ -652,123 +686,108 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
       }
     });
 
-    $.ajax({
+    return $.ajax({
       type: "POST",
       url: panel.rest_pdbe_url,
       data: pdb_list.join(','),
       //dataType: dataType,
-      contentType: 'text/plain',
-      success: function (pdb_data) {
-        $.each(pdb_data,function (pdb_id, pdb_results) {
+      contentType: 'text/plain'
+    })
+    .done(function (pdb_data) {
+      $.each(pdb_data,function (pdb_id, pdb_results) {
 //          console.log("MODEL "+pdb_id);
 //          console.log(pdb_results);
-          $.each(pdb_results, function (index, pdb_result) {
-            var entity = pdb_result.entity_id;
+        $.each(pdb_results, function (index, pdb_result) {
+          var entity = pdb_result.entity_id;
 
-            if (pdb_result.molecule_type!='polypeptide(L)' || !entity) {
-              return true;
+          if (pdb_result.molecule_type!='polypeptide(L)' || !entity) {
+            return true;
+          }
+
+          $.each(pdb_result.in_chains,function (j, chain) {
+            var struct_asym = pdb_result.in_struct_asyms[0];
+            if (pdb_result.in_struct_asyms[j] && j != 0) {
+              struct_asym = pdb_result.in_struct_asyms[j];
             }
-
-            $.each(pdb_result.in_chains,function (j, chain) {
-              var struct_asym = pdb_result.in_struct_asyms[0];
-              if (pdb_result.in_struct_asyms[j] && j != 0) {
-                struct_asym = pdb_result.in_struct_asyms[j];
-              }
-              if (!panel.pdb_chain_struc_entity[pdb_id]) {
-                panel.pdb_chain_struc_entity[pdb_id] = {};
-              }
-              panel.pdb_chain_struc_entity[pdb_id][chain] = { 'struct_asym_id': struct_asym, 'entity_id': entity };
+            if (!panel.pdb_chain_struc_entity[pdb_id]) {
+              panel.pdb_chain_struc_entity[pdb_id] = {};
+            }
+            panel.pdb_chain_struc_entity[pdb_id][chain] = { 'struct_asym_id': struct_asym, 'entity_id': entity };
 //console.log("CE - "+pdb_id+": Entity => "+entity+" | Chain => "+chain+" | Struct asym => "+struct_asym+" | Array: "+panel.pdb_chain_struc_entity[pdb_id][chain] );
-            });
           });
         });
-      },
-      error: function (xhRequest, ErrorText, thrownError) {
-        console.log('ErrorText: ' + ErrorText + "\n");
-        console.log('thrownError: ' + thrownError + "\n");
-      }
+      });
+      console.log(">>>>> STEP 10: Get PDB chain info (get_pdb_chain_struc_entity) - done");
+    })
+    .fail(function (xhRequest, ErrorText, thrownError) {
+      console.log('ErrorText: ' + ErrorText + "\n");
+      console.log('thrownError: ' + thrownError + "\n");
     });
   },
   
-  parse_pdb_results: function(data,ensp,display) {
+  parse_pdb_results: function(ensp,display) {
     var panel = this;
 
     panel.removeSpinner();
 
-    if (data.error) {
-       $('#ensp_pdb').html("Error: we can't retrieve the list of PDB models for this protein!"); 
-    }
-    else if (data.length == 0) {
-      panel.showNoData();
-    }
-    else {
-//console.log("DATA: |"+data+'|');
-      var pdb_list   = [];
-      var pdb_objs   = [];
-      var pdb_struct_asyms = new Object();
+    var pdb_list   = [];
+    var pdb_objs   = [];
+    var pdb_struct_asyms = new Object();
 
-      var var_pos = panel.ensp_var_pos[ensp];      
+    var var_pos = panel.ensp_var_pos[ensp];      
 
-      $.each(data,function (index, result) {
-        var pdb_acc = result.id.split('.');
-        var pdb_id = pdb_acc[0];
-        var pdb_struct_asym = pdb_acc[1];
-        if (pdb_struct_asyms[pdb_id] && jQuery.inArray(pdb_struct_asym,pdb_struct_asyms[pdb_id]) == -1) { 
-          pdb_struct_asyms[pdb_id].push(pdb_struct_asym);
-        }
-        else {
-          pdb_struct_asyms[pdb_id] = [pdb_struct_asym];
-        }
-      });
+    var protein_features = panel.protein_features[ensp]['pdb'];
+    
+    $.each(protein_features,function (index, result) {
+      var pdb_acc = result.id.split('.');
+      var pdb_id = pdb_acc[0];
+      var pdb_struct_asym = pdb_acc[1];
+      if (pdb_struct_asyms[pdb_id] && jQuery.inArray(pdb_struct_asym,pdb_struct_asyms[pdb_id]) == -1) { 
+        pdb_struct_asyms[pdb_id].push(pdb_struct_asym);
+      }
+      else {
+        pdb_struct_asyms[pdb_id] = [pdb_struct_asym];
+      }
+    });
 
-      $.each(data,function (index, result) {
-        var pdb_acc = result.id.split('.');
-        var pdb_id = pdb_acc[0];
-        //var pdb_struct_asym = pdb_acc[1];
-        if (jQuery.inArray(pdb_id,pdb_list) == -1) {
-          var var_in_pdb = 0;
-          if (var_pos) {
-            var var_pos_list = var_pos.split('-');
-            if (var_pos_list[0] >= result.start && var_pos_list[1] <= result.end) {
-              var_in_pdb = 1;
-            }
+    $.each(protein_features,function (index, result) {
+      var pdb_acc = result.id.split('.');
+      var pdb_id = pdb_acc[0];
+      //var pdb_struct_asym = pdb_acc[1];
+      if (jQuery.inArray(pdb_id,pdb_list) == -1) {
+        var var_in_pdb = 0;
+        if (var_pos) {
+          var var_pos_list = var_pos.split('-');
+          if (var_pos_list[0] >= result.start && var_pos_list[1] <= result.end) {
+            var_in_pdb = 1;
           }
-          if ((var_pos && var_in_pdb == 1) || !var_pos) {
-            var pdb_size = result.end - result.start + 1;
-            var chains = pdb_struct_asyms[pdb_id].sort();
-            pdb_objs.push({id: pdb_id, start: result.start, end: result.end, chain: chains, size: pdb_size, hit_start: result.hit_start, hit_end: result.hit_end});
+        }
+        if ((var_pos && var_in_pdb == 1) || !var_pos) {
+          var pdb_size = result.end - result.start + 1;
+          var chains = pdb_struct_asyms[pdb_id].sort();
+          pdb_objs.push({id: pdb_id, start: result.start, end: result.end, chain: chains, size: pdb_size, hit_start: result.hit_start, hit_end: result.hit_end});
 //console.log(pdb_id+": "+result.start+"-"+result.end+" (struct_asym "+chains+")");
-            pdb_list.push(pdb_id);
-          }
-        }
-      });
-
-      if (pdb_objs && pdb_objs.length != 0) {
-
-        panel.ensp_pdb_list[ensp] = pdb_objs;
-
-        if (Object.keys(panel.ensp_pdb_list).length > 1) {
-          if (display) {
-            $('#ensp_list').prepend($('<option>', {
-              value: '-',
-              text : '-'
-            }));  
-          }
-        }
-
-        if (display) {
-          $('#ensp_list').append($('<option>', {
-             value: ensp,
-             text : ensp,
-             selected: 'selected'
-          }));
-     
-          panel.display_pdb_list(ensp);
+          pdb_list.push(pdb_id);
         }
       }
-    }
+    });
 
+    if (pdb_objs && pdb_objs.length != 0) {
+
+      panel.ensp_pdb_list[ensp] = pdb_objs;
+
+      var ensp_option = { 'value' : ensp, 'text' : ensp };
+      if (ensp == panel.ensp_id) {
+        ensp_option['selected'] = 'selected';
+        panel.display_pdb_list(ensp);
+      }
+      $('#ensp_list').append($('<option>', ensp_option));
+
+    }
+    console.log(">>>>> STEP 11: Parse PDBs results (parse_pdb_results) - done");
   },
+
+
   // Display the dropdown selector for the PDB models
   display_pdb_list: function(ensp) {
     var panel = this;
@@ -792,7 +811,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
       $('#pdb_list').hide();
       $('#pdb_list').html('');
 
-      var selected_pdb = '';
+      var selected_pdb;
       var show_pdb_list = 0;
       var first_pdb_entry = 1;
 
@@ -804,16 +823,17 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
       // Makes sure the length of the ENSP is returned before populating the list of PDBe entries
       // The Ensembl REST call is made at the beginning of the script
       var counter = 0;
+      $('#pdb_list').html('');
       var i_length = setInterval(function(){
         counter++;
-        if(counter === 20 || panel.ensp_length[ensp] != undefined || panel.failed_get_ensp_length[ensp] != undefined) {
-
+        if(counter === 20 || panel.ensp_length[ensp] != undefined || panel.failed_get_ensp_length[ensp]) {
+console.log("  # COUNT PDB OBJECTS: "+pdb_list_length);
           $.each(pdb_objs, function (i, pdb_obj) {
             var pdb_mapping_length = pdb_obj.end - pdb_obj.start + 1;
             var ensp_pdb_percent  = (pdb_mapping_length/panel.ensp_length[ensp])*100;
             var ensp_pdb_coverage = Math.round(ensp_pdb_percent);
-
-//console.log("- "+pdb_obj.id+": "+ensp_pdb_coverage+" | "+pdb_mapping_length+" | "+panel.ensp_length[ensp]);
+var filtered_pdb_entry = '';
+var selected_pdb_entry = '';
             if (panel.mapping_min_percent <= ensp_pdb_coverage && panel.mapping_min_length <= pdb_mapping_length) {
               var pdb_coord = " - Coverage: [ PDBe: "+pdb_obj.hit_start+'-'+pdb_obj.hit_end+" | ENSP: "+pdb_obj.start+"-"+pdb_obj.end+" ] => "+ensp_pdb_coverage+"% of ENSP length";
 
@@ -829,94 +849,40 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
                 pdb_option['selected'] = 'selected';
                 selected_pdb = pdb_obj.id;
                 first_pdb_entry = 0;
+selected_pdb_entry = " | SELECTED | CHAIN: "+pdb_obj.chain;
               }
               $('#pdb_list').append($('<option>', pdb_option));
               show_pdb_list = 1;
             }
-         });
+            else { filtered_pdb_entry = " | FILTERED OUT"; }
+console.log("  - "+ensp+" / "+pdb_obj.id+": "+ensp_pdb_coverage+"% | PDB coverage: "+pdb_mapping_length+" | ENSP length: "+panel.ensp_length[ensp]+selected_pdb_entry+filtered_pdb_entry);
+          });
 
-         if (show_pdb_list) {
+          if (show_pdb_list) {
             $('#pdb_list_label').show();
             $('#pdb_list').show();
             panel.selectPDBEntry(selected_pdb);
+            console.log("  !!!! SHOW DATA ????");
           }
           else {
             panel.showNoData();
-          } 
+          }
+
           if (counter === 20 && panel.ensp_length[ensp] == undefined) {
             console.log("Fetching ENSP length through the REST API takes too long!");
           }
+          console.log(">>>>> STEP 12: Display PDBe dropdown (display_pdb_list) - done");
           clearInterval(i_length);
         }
       }, 100);
     }
     $('#ensp_pdb').show();
   },
-
-  get_all_pdb_list: function(ensp_list) {
-    var panel = this;
-    $.each(ensp_list, function(i,ensp) {
-      panel.get_pdb_list(ensp);
-    });
-
-    $( document ).ajaxStop(function() {
-
-      panel.removeSpinner();
-
-      console.log("ENSP count: "+Object.keys(panel.ensp_pdb_list).length+' (get_all_pdb_list)');
-      if (!panel.ensp_id) {
-        var first_ensp_entry = 1;   
-
-        if (Object.keys(panel.ensp_pdb_list).length != 0) {
-
-          if (Object.keys(panel.ensp_pdb_list).length > 1) {
-            var first_ensp_entry = 1;
-
-            $.each(Object.keys(panel.ensp_pdb_list), function(i,ensp) {
-              var ensp_list_option = {
-                value: ensp,
-                text : ensp
-              };
-              if (first_ensp_entry == 1) {
-                ensp_list_option['selected'] = 'selected';
-                panel.ensp_id= ensp;
-                first_ensp_entry = 0;
-              }
-              $('#ensp_list').append($('<option>', ensp_list_option));
-            });
-          }
-          else if (Object.keys(panel.ensp_pdb_list).length == 1) {
-            $.each(Object.keys(panel.ensp_pdb_list), function(i,ensp) {
-              panel.ensp_id = ensp
-              $('#ensp_list').append($('<option>', {
-                value: ensp,
-                text : ensp,
-                selected: 'selected'
-              }));
-              $(".var_pos").html(panel.ensp_var_pos[panel.ensp_id]);
-              $("#var_ensp_id").html(panel.ensp_id);
-              $("#variant_pos_info").show();
-            });
-          }
-          panel.display_pdb_list(panel.ensp_id);
-        }
-        else {
-          panel.showNoData();
-        }
-        $('#pdb_msg').removeClass('spinner');
-        $("#ensp_pdb").show();
-      }
-      else {
-console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
-      }
-    });
-
-  },
   
   
   ///// Ensembl data /////
 
-  // Variant data & Ensembl protein list
+  // Variant data //
   get_var_data: function(var_id) {
     var panel = this;
 
@@ -928,33 +894,33 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
       var_id = $("#var_id").html();
     }
 
-    panel.var_id = var_id
+    panel.var_id = var_id;
 
     $("#var_id").html(panel.var_id);
 
-    $.ajax({
-        url: panel.rest_var_url+panel.var_id,
-        method: "GET",
-        contentType: "application/json; charset=utf-8",
-        success: function (data) {
-          // Variant data
-          panel.parse_var_results(data);
+    return $.ajax({
+      url: panel.rest_var_url+panel.var_id,
+      method: "GET",
+      contentType: "application/json; charset=utf-8"
+    })
+    .done(function (data) {
+      console.log(">>>>> STEP 01: Get Variant data (get_var_data) - done");
+      // Variant data
+      panel.parse_var_results(data);
           
-          // Ensembl protein data
-          var coords = data.mappings[0].location;
-          var chr_start_end = coords.split(':');
-          var start_end = chr_start_end[1].split('-');
-          if (start_end[0]>start_end[1]) {
-            coords=chr_start_end[0]+":"+start_end[1]+"-"+start_end[0];
-          }
-          panel.get_ens_proteins_list(coords);
-        },
-        error: function (xhRequest, ErrorText, thrownError) {
-          console.log('ErrorText: ' + ErrorText + "\n");
-          console.log('thrownError: ' + thrownError + "\n");
-        }
+      // Ensembl protein data
+      /*var coords = data.mappings[0].location;
+      var chr_start_end = coords.split(':');
+      var start_end = chr_start_end[1].split('-');
+      if (start_end[0]>start_end[1]) {
+        coords=chr_start_end[0]+":"+start_end[1]+"-"+start_end[0];
+      }
+      panel.get_ens_proteins_list(coords);*/
+    })
+    .fail(function (xhRequest, ErrorText, thrownError) {
+      console.log('ErrorText: ' + ErrorText + "\n");
+      console.log('thrownError: ' + thrownError + "\n");
     });
-    console.log("Variation coordinates and most severe consequence done");
   },
 
   // Parse results from the Ensembl REST call and display the data
@@ -964,75 +930,29 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
       panel.var_cons = data.most_severe_consequence;
       $('#msc_var').html(panel.var_cons);
     }
+    console.log(">>>>> STEP 02: Parse Variant data (parse_var_results) - done");
   },
 
-  get_ens_proteins_list: function(coords) {
+
+  // Get variant position on ENSP
+  get_var_ensp_pos: function(ensp) {
     var panel = this;
 
-    $('#right_form').addClass('loader_small');
-    $.ajax({
-      url: panel.rest_overlap_url+coords+'?feature=cds',
+    return $.ajax({
+      url: panel.rest_pr_url+ensp+'?feature=transcript_variation;type='+panel.var_cons,
       method: "GET",
-      contentType: "application/json; charset=utf-8",
-      success: function (data) {
-        panel.parse_ens_protein_results(data);
-      },
-      error: function (xhRequest, ErrorText, thrownError) {
-        console.log('ErrorText: ' + ErrorText + "\n");
-        console.log('thrownError: ' + thrownError + "\n");
-      }
-    });
-    console.log("Protein list done");
-  },
-
-  parse_ens_protein_results: function(data) {
-    var panel = this;
-    if (!data.error) {
-      var prot_list = [];
-      $.each(data,function (index, result) {
-        var pr = result.protein_id;
-        if (jQuery.inArray(pr,prot_list) == -1) {
-          prot_list.push(pr);
-          panel.get_ens_protein_length(pr);
-        }
-      });
-      prot_list.sort();
-    
-      $('#right_form').removeClass('loader_small');
-      $('#ensp_list').html('');
-      $('#pdb_list').html('');
-    
-      if (prot_list.length == 0) {
-        panel.showNoData();
-      }
-      else if (prot_list.length == 1) {
-        var pr_id = prot_list[0];
-        panel.ensp_id = pr_id;
-        panel.get_pdb_list(pr_id,1);
-      }
-      else {
-        panel.get_all_pdb_list(prot_list);
-      }
-    }
-  },
-
-  get_ens_protein_length: function(ensp) {
-    var panel = this;
-    $.ajax({
-        url: panel.rest_lookup_url+ensp,
-        method: "GET",
-        contentType: "application/json; charset=utf-8",
-        success: function (data) {
-          panel.ensp_length[ensp] = data.length;
-        },
-        error: function (xhRequest, ErrorText, thrownError) {
-          console.log('ErrorText: ' + ErrorText + "\n");
-          console.log('thrownError: ' + thrownError + "\n");
-          panel.failed_get_ensp_length[ensp] = 1;
-        }
+      contentType: "application/json; charset=utf-8"
+    })
+    .done(function (data) {
+      console.log(">>>>> STEP 06: Get Variant pos on ENSP (get_var_ensp_pos) - done");
+      panel.parse_tv_results(data,ensp);
+    })
+    .fail(function (xhRequest, ErrorText, thrownError) {
+      console.log('ErrorText: ' + ErrorText + "\n");
+      console.log('thrownError: ' + thrownError + "\n");
     });
   },
-  
+
   parse_tv_results: function(data,ensp) {
     var panel = this;
     if (!data.error) {
@@ -1043,7 +963,138 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
         }
       });
     }
+    console.log(">>>>> STEP 07: Parse Variant pos on ENSP (parse_tv_results) - done");
   },
+
+
+  // Ensembl protein list //
+  get_ens_proteins_list: function(var_data) {
+    var panel = this;
+
+    $('#right_form').addClass('loader_small');
+
+    // Get variant coordinates
+    var coords = '';
+    if (var_data.mappings && var_data.mappings.length) {
+      coords = var_data.mappings[0].location;
+      var chr_start_end = coords.split(':');
+      var start_end = chr_start_end[1].split('-');
+      if (start_end[0]>start_end[1]) {
+        coords=chr_start_end[0]+":"+start_end[1]+"-"+start_end[0];
+      }
+    }
+    else {
+      panel.showNoData();
+      return;
+    }
+
+    return $.ajax({
+      url: panel.rest_overlap_url+coords+'?feature=cds',
+      method: "GET",
+      contentType: "application/json; charset=utf-8"
+    })
+    .done(function (data) {
+      console.log(">>>>> STEP 03: Get ENSP list (get_ens_proteins_list) - done");
+      panel.parse_ens_protein_results(data);
+    })
+    .fail(function (xhRequest, ErrorText, thrownError) {
+      console.log('ErrorText: ' + ErrorText + "\n");
+      console.log('thrownError: ' + thrownError + "\n");
+    });
+  },
+
+  parse_ens_protein_results: function(data) {
+    var panel = this;
+    if (!data.error) {
+      var prot_list = [];
+      $.each(data,function (index, result) {
+        var pr = result.protein_id;
+        if (jQuery.inArray(pr,prot_list) == -1) {
+          prot_list.push(pr);
+//          panel.get_ens_protein_length(pr);
+        }
+      });
+//      prot_list.sort();
+//      var pr_lengths = panel.get_ens_protein_length(prot_list);
+    
+      $('#right_form').removeClass('loader_small');
+      $('#ensp_list').html('');
+      $('#pdb_list').html('');
+
+      console.log(">>>>> STEP 04: Parse ENSP list (parse_ens_protein_results) - done");
+
+      if (prot_list.length == 0) {
+        panel.showNoData();
+      }
+      else {
+        prot_list.sort();
+        panel.ensp_list = prot_list;
+        if (!panel.ensp_id) {
+          panel.ensp_id = prot_list[0];
+        }
+        panel.get_ens_protein_length()
+        if (panel.var_id && !panel.ensp_var_pos[panel.ensp_id]) {
+          var result = panel.get_var_ensp_pos(panel.ensp_id);
+        }
+        /*$.when(panel.get_ens_protein_length()).then(function() {
+          if (panel.var_id && !panel.ensp_var_pos[panel.ensp_id]) {
+            var result = panel.get_var_ensp_pos(panel.ensp_id);
+          }
+        });*/
+
+        /*  if (prot_list.length == 1) {
+            var pr_id = prot_list[0];
+            panel.ensp_id = pr_id;
+            //panel.get_pdb_list(pr_id,1);
+            // No onchange event for this
+            if (panel.var_id) {
+console.log("YESSSSSSSSS!")
+              var result = panel.get_var_ensp_pos(pr_id);
+console.log("NOOOOOOOOOO!");
+            }
+            panel.get_pdb_list(pr_id,1)
+          }
+          else {
+            // Add default value
+            if (!panel.ensp_id) {
+              panel.ensp_id = prot_list[0];
+            }
+            panel.get_all_pdb_list(prot_list);
+          }
+        });*/
+      }
+    }
+  },
+
+
+  get_ens_protein_length: function() {
+    var panel = this;
+
+    $.ajax({
+      /*url: panel.rest_lookup_url+ensp,
+      method: "GET",
+      contentType: "application/json; charset=utf-8"*/
+      type: "POST",
+      url: panel.rest_lookup_url,
+      data: '{ "ids" : ["'+panel.ensp_list.join('","')+'"], "db_type" : "core" }',
+      dataType: "json",
+      contentType: 'application/json; charset=utf-8'
+    })
+    .done(function (data) {
+      $.each(data, function(ensp, ensp_info) {
+        panel.ensp_length[ensp] = ensp_info.length;
+      });
+      console.log(">>>>> STEP 05: Get ENSP length (get_ens_protein_length) - done");
+    })
+    .fail(function (xhRequest, ErrorText, thrownError) {
+      console.log('ErrorText: ' + ErrorText + "\n");
+      console.log('thrownError: ' + thrownError + "\n");
+      $.each(ensp_list, function(i, ensp) {
+        panel.failed_get_ensp_length[ensp] = 1;
+      });
+    });
+  },
+
   
   
   ///// Get and display Ensembl features /////
@@ -1056,14 +1107,14 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
         method: "GET",
         contentType: "application/json; charset=utf-8",
         success: function (data) {
+          console.log(">>>>> STEP 15a: Get Exon data (get_exon_data) - done");
           panel.parse_exon_results(data);
         },
         error: function (xhRequest, ErrorText, thrownError) {
           console.log('ErrorText: ' + ErrorText + "\n");
           console.log('thrownError: ' + thrownError + "\n");
         }
-    });
-    console.log("Exon coordinates done");
+    });;
   },
   parse_exon_results: function(data) {
     var panel = this;
@@ -1134,38 +1185,12 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
   get_protein_feature_data: function(ensp_id) {
     var panel = this;
 
-    /*$.ajax({
-        url: panel.rest_pr_url+ensp_id+'?feature=protein_feature',        
-        method: "GET",
-        contentType: "application/json; charset=utf-8",
-        success: function (data) {
-          if (!data.error) {
-            var data_per_type = {};
-            $.each(data, function(index,item) {
-              if (data_per_type[item.type]) {
-                data_per_type[item.type].push(item);
-              }
-              else {
-                data_per_type[item.type] = [item];
-              }
-            });
-            $.each(panel.protein_sources, function(type, url) {
-              if (data_per_type[type]) {
-                panel.parse_protein_feature_results(data_per_type[type],type);
-              }
-            });
-          }
-        },
-        error: function (xhRequest, ErrorText, thrownError) {
-          console.log('ErrorText: ' + ErrorText + "\n");
-          console.log('thrownError: ' + thrownError + "\n");
-        }
-    });*/
     $.each(panel.protein_sources, function(type, url) {
-      if (panel.protein_features[type]) {
-        panel.parse_protein_feature_results(panel.protein_features[type],type);
+      if (panel.protein_features[ensp_id][type]) {
+        panel.parse_protein_feature_results(panel.protein_features[ensp_id][type],type);
       }
     });
+    console.log(">>>>> STEP 15b: Get Proteins feature (get_protein_feature_data) - done");
   },
   parse_protein_feature_results: function(data,type) {
     var panel = this;
@@ -1212,24 +1237,27 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     panel.render_selection_details('protein', lc_type, type, pf_count, pf_details);
   },
 
+
   get_sift_polyphen_data: function(ensp_id) {
     var panel = this;
 
     $.ajax({
-        url: panel.rest_pr_url+ensp_id+'?feature=transcript_variation',
-        method: "GET",
-        contentType: "application/json; charset=utf-8",
-        success: function (data) {
-          panel.parse_sift_results(data);
-          panel.parse_polyphen_results(data);
-        },
-        error: function (xhRequest, ErrorText, thrownError) {
-          console.log('ErrorText: ' + ErrorText + "\n");
-          console.log('thrownError: ' + thrownError + "\n");
-        }
+      url: panel.rest_pr_url+ensp_id+'?feature=transcript_variation',
+      method: "GET",
+      contentType: "application/json; charset=utf-8"
+    })
+    .done(function (data) {
+      console.log(">>>>> STEP 15c: Get SIFT and PolyPhen data (get_sift_polyphen_data) - done");
+      panel.parse_sift_results(data);
+      panel.parse_polyphen_results(data);
+    })
+    .fail(function (xhRequest, ErrorText, thrownError) {
+      console.log('ErrorText: ' + ErrorText + "\n");
+      console.log('thrownError: ' + thrownError + "\n");
     });
-    console.log("SIFT results done");
   },
+
+
   parse_sift_results: function(data) {
     var panel = this; 
 
@@ -1290,30 +1318,16 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     });
 
     // Legend
-    var legend = '<div class="pdb_legend">';
-    if (sift_categories['score_good']) {
-      legend += '  <div class="float_left" style="margin-right:10px">'+
-                '    <div class="float_left _ht score_legend_left score_bg_good" title="Greater than or equal to 0.05">Tolerated</div>'+
-                '    <div class="float_left score_legend_right">'+
-                '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Tolerated SIFT Variant" id="sift_1_sg" data-super-group="sift_group"></div>'+
-                '    </div>'+
-                '    <div style="clear:both"></div>'+
-                '  </div>';
-    }
-    if (sift_categories['score_bad']) {
-      legend += '  <div class="float_left">'+
-                '    <div class="float_left _ht score_legend_left score_bg_bad" title="Less than 0.05">Deleterious</div>'+
-                '    <div class="float_left score_legend_right">'+
-                '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Deleterious SIFT Variant" id="sift_2_sg" data-super-group="sift_group"></div>'+
-                '    </div>'+
-                '    <div style="clear:both"></div>'+
-                '  </div>';
-    }
-    legend += '  <div style="clear:both"></div>'+
-              '</div>';
+    var legend_data = [
+      { 'score_good'    : { 'id': sift_sg['score_good'], 'class' : 'score_bg_good', 'label' : 'Tolerated',   'title' : 'Greater than or equal to 0.05' } },
+      { 'score_bad'     : { 'id': sift_sg['score_bad'],  'class' : 'score_bg_bad',  'label' : 'Deleterious', 'title' : 'Less than 0.05' } }
+    ];
+    var legend = panel.build_legend(sift_categories,legend_data,'sift');
 
     panel.render_selection_details('variant','sift', 'SIFT', sift_count, sift_details, 'Residues;Score', legend, 1);
   },
+
+
   parse_polyphen_results: function(data) {
     var panel = this;
 
@@ -1386,50 +1400,17 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     });
 
     // Legend
-    var legend = '<div class="pdb_legend">';
-    if (polyphen_categories['score_good']) {
-      legend += '  <div class="float_left" style="margin-right:10px">'+
-                '    <div class="float_left _ht score_legend_left score_bg_good" title="Less than or equal to 0.446">Benign</div>'+
-                '    <div class="float_left score_legend_right">'+
-                '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Benign PolyPhen Variant" id="polyphen_1_sg" data-super-group="polyphen_group"></div>'+
-                '    </div>'+
-                '    <div style="clear:both"></div>'+
-                '  </div>';
-    }
-    if (polyphen_categories['score_ok']) {
-      legend += '  <div class="float_left" style="margin-right:10px">'+
-                '    <div class="float_left _ht score_legend_left score_bg_ok" title="Greater than 0.446 and less than or equal to 0.908">Possibly Damaging</div>'+
-                '    <div class="float_left score_legend_right">'+
-                '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Possibly Damaging PolyPhen Variant" id="polyphen_2_sg" data-super-group="polyphen_group"></div>'+
-                '    </div>'+
-                '    <div style="clear:both"></div>'+
-                '  </div>';
-    }
-    if (polyphen_categories['score_bad']) {
-      legend += '  <div class="float_left" style="margin-right:10px">'+
-                '    <div class="float_left _ht score_legend_left score_bg_bad" title="Greater than 0.908">Probably Damaging</div>'+
-                '    <div class="float_left score_legend_right">'+
-                '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Probably Damaging PolyPhen Variant" id="polyphen_3_sg" data-super-group="polyphen_group"></div>'+
-                '    </div>'+
-                '    <div style="clear:both"></div>'+
-                '  </div>';
-    }
-    if (polyphen_categories['score_neutral']) {
-      legend += '  <div class="float_left">'+
-                '    <div class="float_left _ht score_legend_left score_bg_neutral" title="Unknown">Unknown</div>'+
-                '    <div class="float_left score_legend_right">'+
-                '      <div class="pdb_feature_subgroup view_disabled" title="Click to highlight / hide Unknown PolyPhen Variant" id="polyphen_4_sg" data-super-group="polyphen_group"></div>'+
-                '    </div>'+
-                '    <div style="clear:both"></div>'+
-                '  </div>';
-    }
-     
-    legend += '  <div style="clear:both"></div>'+
-              '</div>';
-
+    var legend_data = [
+      { 'score_good'    : { 'id': polyphen_sg['score_good'],    'class' : 'score_bg_good',    'label' : 'Benign',            'title' : 'Less than or equal to 0.446' } },
+      { 'score_ok'      : { 'id': polyphen_sg['score_ok'],      'class' : 'score_bg_ok',      'label' : 'Possibly Damaging', 'title' : 'Greater than 0.446 and less than or equal to 0.908' } },
+      { 'score_bad'     : { 'id': polyphen_sg['score_bad'],     'class' : 'score_bg_bad',     'label' : 'Probably Damaging', 'title' : 'Greater than 0.908' } },
+      { 'score_neutral' : { 'id': polyphen_sg['score_neutral'], 'class' : 'score_bg_neutral', 'label' : 'Unknown',           'title' : 'Unknown' } }
+    ];
+    var legend = panel.build_legend(polyphen_categories,legend_data,'polyphen');
 
     panel.render_selection_details('variant','polyphen', 'PolyPhen', polyphen_count, polyphen_details, 'Residues;Score', legend, 1);
   },
+
 
   render_selection_details: function (category,type,type_label,type_count,details,extra_col,legend,has_subgroup) {
     var panel = this;
@@ -1487,6 +1468,42 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
     $('._ht').helptip();
   },
 
+
+  build_legend : function(type_list,legend_data,data_type) {
+
+    var legend_content = '';
+    var type_count = type_list.length;
+    var count = 0;
+    $.each(legend_data, function(i,legend_item) {
+      $.each(legend_item, function(type,data) {
+        if (type_list[type]) {
+          count++;
+          var margin = (count == type_count) ? '' : ' style="margin-right:10px"';
+          var view_title = 'Click to highlight / hide '+data['label']+' '+data_type+' Variant';
+          legend_content += '  <div class="float_left"'+margin+'>'+
+                            '    <div class="float_left _ht score_legend_left '+data['class']+'" title="'+data['title']+'">'+data['label']+'</div>'+
+                            '    <div class="float_left score_legend_right">'+
+                            '      <div class="pdb_feature_subgroup view_disabled" title="'+view_title+'" id="'+data['id']+'" data-super-group="'+data_type+'_group"></div>'+
+                            '    </div>'+
+                            '    <div style="clear:both"></div>'+
+                            '  </div>';
+        }
+      });
+    });
+
+    if (legend_content == '') {
+      return undefined;
+    }
+
+    var legend = '<div class="pdb_legend">'+
+                 legend_content+ 
+                 '  <div style="clear:both"></div>'+
+                 '</div>';
+
+    return legend;
+  },
+
+
   ensp_to_pdb_coords: function(start_res, end_res) {
     var panel = this;
 
@@ -1506,12 +1523,12 @@ console.log("panel.ensp_id '"+panel.ensp_id+"' is defined");
 //console.log("SHIFT: "+coords_shift);
     if (start_res < panel.pdb_start && end_res > panel.pdb_start) {
       pdb_res_start = panel.pdb_start + coords_shift;
-      console.log("ENSP start: "+start_res+" | PDB start: "+panel.pdb_start+" | PDB coord: "+pdb_res_start);
+      console.log("  ENSP start: "+start_res+" | PDB start: "+panel.pdb_start+" | PDB coord: "+pdb_res_start);
     }
 
     if (end_res > panel.pdb_end && start_res < panel.pdb_end) {
       pdb_res_end = panel.pdb_end + coords_shift;
-      console.log("ENSP end: "+end_res+" | PDB end: "+panel.pdb_end+" | PDB coord: "+pdb_res_end);
+      console.log("  ENSP end: "+end_res+" | PDB end: "+panel.pdb_end+" | PDB coord: "+pdb_res_end);
     }
 
     // Convert to PDB coordinates (will need to be fixed properly)
