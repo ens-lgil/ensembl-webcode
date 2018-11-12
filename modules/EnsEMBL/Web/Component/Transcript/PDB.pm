@@ -45,10 +45,12 @@ sub content {
     return unless $translation;
   
     my $translation_id = $translation->stable_id;
+    my $rest_url = $hub->species_defs->ENSEMBL_REST_URL;
 
     $html .= qq{
   <input class="panel_type" value="PDB" type="hidden" />
-  
+  <input type="hidden" name="ensembl_rest_url" class="js_param" value="$rest_url">  
+
   <!-- Complied & minified library css -->
   <link rel="stylesheet" href="https://www.ebi.ac.uk/pdbe/pdb-component-library/v1.0/css/pdb.component.library.min-1.0.0.css" />
   <!--<link rel="stylesheet" href="/pdbe/pdb.component.library.min-1.0.0.css" />-->
@@ -65,8 +67,13 @@ sub content {
   <script src="/pdbe/pdb.component.library.min-1.0.0.js"></script>
   <!--<script src="//www.ebi.ac.uk/~lgil/tests/3d/popup/litemol-custom-theme.js"></script>-->
   <!--<script src="http://ves-hx2-76.ebi.ac.uk:5060/pdbe/litemol-custom-theme.js"></script>-->
-  
-  <h2>3D representation of the Ensembl protein <span id="ensp_id">$translation_id</span></h2>
+ 
+  <div> 
+    <h2 class="float_left">3D representation of the Ensembl protein</h2>
+    <a id="mapping_top_ensp" class="float_left viewer_btn viewer_btn_link left-margin _ht" title="Selected Ensembl protein"><span id="ensp_id">$translation_id</span></a>
+    <a id="mapping_top_pdb" class="float_left viewer_btn viewer_btn_link left-margin _ht" target=_blank" style="background-color:#669966" title="Selected PDB model"></a>
+    <div style="clear:both"></div>
+  </div>
    
   <div id="pdb_msg"></div>
 

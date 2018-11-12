@@ -18,7 +18,6 @@
 
 Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
   init: function() {
-    console.log('init PDB');
     var panel = this;
     this.base.apply(this, arguments);
 
@@ -34,16 +33,17 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
 
 
     // Check if we can get the REST URL from the webiste
-    this.rest_url_root         = 'https://rest.ensembl.org/';
-    this.rest_var_url          = this.rest_url_root+'variation/'+this.species+'/';
-    this.rest_overlap_url      = this.rest_url_root+'overlap/region/'+this.species+'/';
-    this.rest_pr_url           = this.rest_url_root+'overlap/translation/';
-    this.rest_lookup_url       = this.rest_url_root+'lookup/id/';
+    this.rest_url_root         = this.params['ensembl_rest_url'];
+    this.rest_var_url          = this.rest_url_root+'/variation/'+this.species+'/';
+    this.rest_overlap_url      = this.rest_url_root+'/overlap/region/'+this.species+'/';
+    this.rest_pr_url           = this.rest_url_root+'/overlap/translation/';
+    this.rest_lookup_url       = this.rest_url_root+'/lookup/id/';
     this.pdbe_url_root         = 'https://www.ebi.ac.uk/pdbe';
     this.rest_pdbe_url_root    = this.pdbe_url_root+'/api/';
     this.rest_pdbe_url         = this.rest_pdbe_url_root+'pdb/entry/molecules/';
     this.rest_pdbe_quality_url = this.rest_pdbe_url_root+'validation/summary_quality_scores/entry/';
-   
+
+    // Setup external lin;s   
     this.protein_sources = { 
                              'Pfam'   : 'http://pfam.xfam.org/family/',
                              'PRINTS' : 'https://www.ebi.ac.uk/interpro/signature/',
@@ -64,6 +64,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
                          '#DDD'       : {r:221, g:221, b:221}
                        };
 
+    // Module variables
     this.liteMolScope;
     
     this.var_id;
@@ -98,7 +99,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
 
 
     $(document).ready(function () {
-      console.log('doc ready');
+      console.log('>>>>> STEP 00: init PDB variables and run document ready');
       
       panel.addSpinner(); 
 
@@ -132,11 +133,12 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
           });
         });
 
-        // Setup variant position, regarding the selected ENSP
+        // Setup variant position (and display it) regarding the selected ENSP
         $('#ensp_list').change(function () {
           panel.ensp_id = $(this).val();
           if (panel.ensp_id) {
             if (!panel.ensp_var_pos[panel.ensp_id]) {
+              // Call method to get variant positon on protein
               $.when(panel.get_var_ensp_pos()).then(function() {
                 $(".var_pos").html(panel.ensp_var_pos[panel.ensp_id]);
               });
@@ -149,6 +151,7 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
             $("#variant_pos_info").show();
             panel.display_pdb_list(panel.ensp_id);
           }
+          // Reset the variant position display on the page
           else {
             $(".var_pos").html('');
             $("#var_ensp_id").html('');
@@ -201,7 +204,8 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
         setTimeout(function(){ 
           // Reset right hand menu
           panel.setDefaultHighlighting();
-          // Reset to default view (like the "Reset" button in the viewer
+          // Reset to default view (like the "Reset" button in the viewer)
+          // Code from LiteMol
           panel.liteMolScope.LiteMolComponent.Bootstrap.Command.Visual.ResetScene.dispatch(panel.liteMolScope.LiteMolComponent.plugin.context, void 0);
           // Reset to default highlighting
           panel.selectedFeatureGroupsToHighlight();
@@ -212,13 +216,15 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
     });
   },
 
-
+  // Reset default highlighting:
+  // everything is disabled except the mapping ENSP-PDB and the focus variant (if on a variant page)
   setDefaultHighlighting: function() {
     var panel = this;
-    
+   
+    // Disable everything 
     $('.view_enabled').switchClass('view_enabled','view_disabled');
 
-    // Check default options
+    // Enable default options
     $('#mapping_group').switchClass('view_disabled','view_enabled');
     if (panel.var_id) {
       $('#variant_group').switchClass('view_disabled','view_enabled');
@@ -229,14 +235,15 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
   // Select the PDB entry, setup display and launch 3D model
   selectPDBEntry: function(pdb_id) {
     var panel = this;
-console.log(">>>>> STEP 13: Select PDB entry (selectPDBEntry) - start");
+    console.log(">>>>> STEP 13: Select PDB entry (selectPDBEntry) - start");
 
-     panel.setDefaultHighlighting();
+    panel.setDefaultHighlighting();
 
     // Extracting PDB data and store it in panel
     if (pdb_id && pdb_id != '-') {
       var sel = $('#pdb_list').find('option:selected');
 
+      // Store information about selected PDB model in module variables
       panel.pdb_id        = pdb_id;
       panel.pdb_start     = Number(sel.attr('data-start'));
       panel.pdb_end       = Number(sel.attr('data-end'));
@@ -244,8 +251,16 @@ console.log(">>>>> STEP 13: Select PDB entry (selectPDBEntry) - start");
       panel.pdb_hit_start = Number(sel.attr('data-hit-start'));
       console.log("    # PDB coords of "+pdb_id+" (on ENSP): "+panel.pdb_start+'-'+panel.pdb_end);
 
-      $('#mapping_ensp').html('<a href="/'+panel.species+'/Transcript/Summary?t='+panel.ensp_id+'" style="color:white">'+panel.ensp_id+'</a>');
-      $('#mapping_pdb').html('<a href="'+panel.pdbe_url_root+'/entry/pdb/'+pdb_id+'" rel="external" style="color:white">'+pdb_id.toUpperCase()+'</a>');
+      // Display selected ENSP ID and PDB model ID in page
+      $('#mapping_top_ensp').html('<small style="color:#DDF">Ensembl: </small><span>'+panel.ensp_id+'</span>');
+      $('#mapping_top_ensp').attr("href", '/'+panel.species+'/Transcript/Summary?t='+panel.ensp_id);
+      $('#mapping_top_ensp').show();
+      $('#mapping_top_pdb').html('<small style="color:#DFD">PDBe: </small><span>'+pdb_id.toUpperCase()+'</span>');
+      $('#mapping_top_pdb').attr("href", panel.pdbe_url_root+'/entry/pdb/'+pdb_id);
+      $('#mapping_top_pdb').show();
+
+      $('#mapping_ensp').html(panel.ensp_id);
+      $('#mapping_pdb').html(pdb_id.toUpperCase());
 
       // Assign position to variant
       if (panel.var_id) {
@@ -254,14 +269,16 @@ console.log(">>>>> STEP 13: Select PDB entry (selectPDBEntry) - start");
         var ensp_var_pos_interval = setInterval(function(){
           if (panel.ensp_var_pos[panel.ensp_id] || interval_iteration_count == max_interval_iteration) {*/
 
+        // Position on ENSP
         var var_pos_ensp = panel.ensp_var_pos[panel.ensp_id].split('-');
+        // Position on PDB
         var var_pdb_coords = panel.ensp_to_pdb_coords(var_pos_ensp[0],var_pos_ensp[1]);
 
         $('#'+panel.var_id+'_cb').attr('data-value', var_pdb_coords[0]+','+var_pdb_coords[1]);
 
         // Special display for the stop_gained variants
         if (panel.var_cons && (panel.var_cons == 'stop_gained' || panel.var_cons == 'frameshift_variant')) {
-          var var_pos_after_stop =  Number(var_pos_ensp[1]) + 1;
+          var var_pos_after_stop =  Number(var_pdb_coords[1]) + 1;
  
           var altered_sequence = '<tr>'+
                                  '  <td style="border-color:darkred">Altered/missing sequence</td>'+
@@ -296,7 +313,9 @@ console.log(">>>>> STEP 13: Select PDB entry (selectPDBEntry) - start");
       var ensp_pdb_coords = panel.ensp_to_pdb_coords(panel.pdb_start, panel.pdb_end);
       $('#mapping_cb').attr('data-value', ensp_pdb_coords[0]+','+ensp_pdb_coords[1]);
 
+      // ENSP covered coordinates
       $('#mapping_ensp_pos').html(panel.pdb_start+'-'+panel.pdb_end);
+      // PDB  covered coordinates
       $('#mapping_pdb_pos').html(ensp_pdb_coords[0]+'-'+ensp_pdb_coords[1]);
 
       // Display the LiteMol canvas
@@ -306,16 +325,17 @@ console.log(">>>>> STEP 13: Select PDB entry (selectPDBEntry) - start");
       // Set interval to check that the model loading is done before highlighting some features by default
       var max_interval_iteration = 30;
       var interval_iteration_count = 0;
-      var checkExist = setInterval(function() {
-        if (panel.liteMolScope.LiteMolComponent.plugin.context.select('model')[0] != undefined || interval_iteration_count == max_interval_iteration) {
+      var check_model_loaded = setInterval(function() {
+        // Check if model is finished loaded in the LiteMol viewer
+        if (panel.liteMolScope.LiteMolComponent.plugin.context.select('model').length != 0 || interval_iteration_count == max_interval_iteration) {
           if (interval_iteration_count == max_interval_iteration) {
             console.log("Model loading takes too long!");
           }
           var timeout = (panel.var_id) ? 0 : 200;
           setTimeout(function(){ panel.selectedFeatureGroupsToHighlight(); }, timeout)
   
-          clearInterval(checkExist);
-          checkExist = 0;
+          clearInterval(check_model_loaded);
+          check_model_loaded = 0;
           console.log(">>>>> STEP 14: Load 3D widget (load3DWidget) - done | iterations: "+interval_iteration_count);
         }
         interval_iteration_count ++;
@@ -326,8 +346,11 @@ console.log(">>>>> STEP 13: Select PDB entry (selectPDBEntry) - start");
 
       // Load the right hand side menu
       if (panel.ensp_id) {
-        panel.get_exon_data(panel.ensp_id); // Might need to move it into the #ensp_list change block
+        // Exons
+        panel.get_exon_data(panel.ensp_id);
+        // Protein features
         panel.get_protein_feature_data(panel.ensp_id);
+        // SIFT and PolyPhen2
         panel.get_sift_polyphen_data(panel.ensp_id);
       }
     }
@@ -341,16 +364,18 @@ console.log(">>>>> STEP 13: Select PDB entry (selectPDBEntry) - start");
   load3DWidget: function() {
     var panel = this;
 
+    // Reset if an other model already loaded
     panel.removeComponents(); 
   
     var pdb_litemol_id = 'litemol_pdb_model';
   
-    var pdb_tag = '<pdb-lite-mol id="'+pdb_litemol_id+'" pdb-id="\''+panel.pdb_id+'\'" hide-controls="true" fogEnabled="false" show-logs="false"></pdb-lite-mol>';
+    var pdb_tag = '<pdb-lite-mol id="'+pdb_litemol_id+'" pdb-id="\''+panel.pdb_id+'\'" hide-controls="true" show-logs="false"></pdb-lite-mol>';
     
     $("#litemol_canvas").html(pdb_tag);
 
     var componentElements = $('#'+pdb_litemol_id);
 
+    // Start Angular application
     angular.bootstrap(componentElements, ['pdb.component.library']);
 
     // Method to bind component scope
@@ -398,10 +423,11 @@ console.log(">>>>> STEP 13: Select PDB entry (selectPDBEntry) - start");
     $('div[id$='+id+']').each(function() {
       var gp_id = $(this).attr('id');
 
+      // Check if group already selected
       var is_selected = $('#'+gp_id).hasClass('view_enabled');
-//console.log("GROUP ID: "+gp_id+" => "+is_selected);
       var pdb_feature_entry_array = $('[data-group="'+gp_id+'"]');
 
+      // Update display of each item of the group
       pdb_feature_entry_array.each(function() {
         if (is_selected) {
           $(this).switchClass('view_disabled','view_enabled');
@@ -412,6 +438,7 @@ console.log(">>>>> STEP 13: Select PDB entry (selectPDBEntry) - start");
       });
     });
 
+    // Highlight the selected items
     panel.selectedFeaturesToHighlight();
   },
 
@@ -425,10 +452,12 @@ console.log(">>>>> STEP 13: Select PDB entry (selectPDBEntry) - start");
     }
     $('div[id$='+id+']').each(function() {
       var subgp_id = $(this).attr('id');
-
+      
+      // Check if sub-group already selected
       var is_selected = $('#'+subgp_id).hasClass('view_enabled');
       var pdb_feature_entry_array = $('[data-sg="'+subgp_id+'"]');
     
+      // Update display of each item of the sub-group
       pdb_feature_entry_array.each(function() {
         if (is_selected) {
           $(this).switchClass('view_disabled','view_enabled');
@@ -439,6 +468,7 @@ console.log(">>>>> STEP 13: Select PDB entry (selectPDBEntry) - start");
       });
     });
 
+    // Highlight the selected items
     panel.selectedFeaturesToHighlight();
   },
 
@@ -658,73 +688,56 @@ console.log(">>>>> STEP 13: Select PDB entry (selectPDBEntry) - start");
 
     var pdb_list_calls = [];
 
+    // Get the list of mapped PDB entries for each ENSP (from Ensembl 'protein_features' DB table, throught the REST API)
     $.each(panel.ensp_list, function(i,ensp) {
-      pdb_list_calls.push(panel.get_pdb_list(ensp));
+      pdb_list_calls.push(panel.get_pdb_by_ensp(ensp));
     });
 
     // Waiting that the search of PDB entries for each ENSP has been done, using a list of promises,
     // so it can returns an error message if no mappings at all have been found
     $.when.apply(undefined, pdb_list_calls).then(function(results){ 
+      $.each(panel.ensp_list, function(i,ensp) {
+        // Extract list of PDB IDs and fetch extra PDB information (through the PDBe REST API
+        if (panel.protein_features[ensp]['pdb'] && panel.protein_features[ensp]['pdb'].length !=0) {
+          panel.get_pdb_extra_data(ensp);
+        }
+        // Can't get PDB model for this ENSP
+        else {
+          panel.ensp_pdb_list_fetch.push(ensp);
+        }
+      });      
+
 //console.log("ENSP List: "+panel.ensp_list.length+" | ENSP PDB Fetch: "+panel.ensp_pdb_list_fetch.length+" | ENSP-PDB list: "+Object.keys(panel.ensp_pdb_list).length);
       if (panel.ensp_list.length == panel.ensp_pdb_list_fetch.length) {
         if (Object.keys(panel.ensp_pdb_list).length == 0) {
           panel.removeSpinner();
-          panel.showNoData('No PDBe mapping found for the protein(s) '+panel.ensp_list.join(', ')+'.');
+          var ensp_no_pdb = (panel.ensp_list.length > 1) ? ':<ul><li>'+panel.ensp_list.join('</li><li>')+'</li></ul>' : panel.ensp_list[0]+".";
+          panel.showNoData('No PDBe mapping found for the protein(s) '+ensp_no_pdb);
         }
       }
     });
-
-  /*  $.each(panel.ensp_list, function(i,ensp) {
-      if (ensp == panel.ensp_id) {
-        panel.get_pdb_list(ensp,1);
-      }
-      else {
-        panel.get_pdb_list(ensp);
-      }
-    });
-
-    // Waiting that the search of PDB entries for each ENSP has been done,
-    // so it can returns an error message if no mappings at all have been found
-    var pdb_list_fetch = setInterval(function(){
-//console.log("ENSP List: "+panel.ensp_list.length+" | ENSP PDB Fetch: "+panel.ensp_pdb_list_fetch.length+" | ENSP-PDB list: "+Object.keys(panel.ensp_pdb_list).length);
-      if (panel.ensp_list.length == panel.ensp_pdb_list_fetch.length) {
-        if (Object.keys(panel.ensp_pdb_list).length == 0) {
-          panel.removeSpinner();
-          panel.showNoData('No PDBe mapping found for the protein(s) '+panel.ensp_list.join(', ')+'.');
-        }
-        console.log(">>>>> STEP 08: Get all the PDB lists (get_all_pdb_list) - done");
-        clearInterval(pdb_list_fetch);
-      }
-    }, 100);*/
   },
 
-  // Get the list of mapped PDB model for a given ENSP (fetching data from Ensembl DB through REST API)
+
+  // Extract the list of mapped PDB model for a given ENSP
   // and then fetch extra information about these PDB models (through the PDB REST API)
-  get_pdb_list: function(ensp) {
+  get_pdb_extra_data: function(ensp) {
     var panel = this;
 
-    // Get the list of mapped PDB entries for this ENSP (from Ensembl 'protein_features' DB table, throught the REST API)
-    $.when(panel.get_pdb_by_ensp(ensp)).then(function() {
-      if (panel.protein_features[ensp]['pdb'] && panel.protein_features[ensp]['pdb'].length !=0) {
-        // Extract the list of PDB IDs
-        var pdb_list = []; 
-        $.each(panel.protein_features[ensp]['pdb'],function (index, result) {
-          var pdb_acc = result.id.split('.');
-          var pdb_id = pdb_acc[0];
-          if ($.inArray(pdb_id,pdb_list) == -1) {
-            pdb_list.push(pdb_id);
-          }
-        });
-        // Get quality score and PDB chain structure before generating the final list of PDB entries for this ENSP
-        $.when(panel.get_pdb_quality_score(ensp,pdb_list), panel.get_pdb_chain_struc_entity(pdb_list)).then(function() {
-          panel.parse_pdb_results(ensp);
-        });
-      }
-      else {
-        panel.ensp_pdb_list_fetch.push(ensp);
+    // Extract the list of PDB IDs for the ENSP
+    var pdb_list = []; 
+    $.each(panel.protein_features[ensp]['pdb'],function (index, result) {
+      var pdb_acc = result.id.split('.');
+      var pdb_id = pdb_acc[0];
+      if ($.inArray(pdb_id,pdb_list) == -1) {
+        pdb_list.push(pdb_id);
       }
     });
 
+    // Get quality score and PDB chain structure before generating the final list of PDB entries for this ENSP
+    $.when(panel.get_pdb_quality_score(ensp,pdb_list), panel.get_pdb_chain_struc_entity(pdb_list)).then(function() {
+      panel.parse_pdb_results(ensp);
+    });
   },
 
 
@@ -761,7 +774,7 @@ console.log(">>>>> STEP 13: Select PDB entry (selectPDBEntry) - start");
         }
       });
 
-      console.log("  >>> STEP 09: Get list of PDBs by ENSP (get_pdb_by_ensp) - done");
+      console.log("  >>> STEP 09: Get list of PDBs by ENSP - "+ensp+" (get_pdb_by_ensp) - done");
     })
     .fail(function (xhRequest, ErrorText, thrownError) {
       console.log('ErrorText: ' + ErrorText + "\n");
@@ -831,7 +844,7 @@ console.log('    - '+pdb_id+": "+pdb_results.overall_quality);
               panel.pdb_chain_struc_entity[pdb_id] = {};
             }
             panel.pdb_chain_struc_entity[pdb_id][chain] = { 'struct_asym_id': struct_asym, 'entity_id': entity };
-console.log("CE - "+pdb_id+": Entity => "+entity+" | Chain => "+chain+" | Struct asym => "+struct_asym+" | Array: "+panel.pdb_chain_struc_entity[pdb_id][chain] );
+//console.log("CE - "+pdb_id+": Entity => "+entity+" | Chain => "+chain+" | Struct asym => "+struct_asym+" | Array: "+panel.pdb_chain_struc_entity[pdb_id][chain] );
           });
         });
       });
@@ -1543,12 +1556,14 @@ console.log("CE - "+pdb_id+": Entity => "+entity+" | Chain => "+chain+" | Struct
         label = $('<div></div>');
         label.attr('id', td_label);
       }
+      var entry_scalar  = (type_count > 1) ? 'ies' : 'y';
+      var overlap_label = (type_count > 1) ? '' : 's';
       label.html(
         '<div>'+
-        '  <h3 class="float_left" style="margin-bottom:0px">'+type_label+'</h3>'+
+        '  <h3 class="float_left">'+type_label+'</h3>'+
         '  <div class="float_right view_toggle view_toggle_btn closed" rel="'+label_id+'"></div>'+
         '  <div class="float_right pdb_feature_group view_disabled" title="Click to highlight / hide '+type_label+' on the 3D viewer" id="'+cb_group+'"'+sg_flag+'></div>'+
-        '  <div class="float_right view_badge">'+type_count+'</div>'+
+        '  <div class="float_right view_badge" title="'+type_count+' '+type_label+' entr'+entry_scalar+' overlap'+overlap_label+' this PDB model">'+type_count+'</div>'+
         '  <div style="clear:both"></div>'+
         '</div>'+
         '<div class="'+label_id+'">'+

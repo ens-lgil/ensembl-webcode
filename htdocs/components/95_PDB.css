@@ -6,6 +6,7 @@ table.pdb_features {
 } 
 table.pdb_features a { text-decoration:none; }
 
+table.pdb_features th { padding-bottom:0px; }
 table.pdb_features th.location {  cursor:default; }
 table.pdb_features th.location > span {
   line-height:18px;
@@ -54,7 +55,16 @@ table.pdb_markup > tbody > tr > td > div:not(:first-child):last-child {
   padding-bottom:0px;
 }
 
+table.pdb_markup > tbody > tr > td > div:not(:last-child) {
+  border-bottom: 1px solid [[MAIN_MEDIUM]];
+}
+
 table.pdb_markup a:hover { cursor:pointer; }
+
+table.pdb_markup h3 {
+  margin-bottom:0px;
+  margin-left:2px;
+}
 
 .pdb_legend {
   white-space:nowrap;
@@ -73,6 +83,7 @@ table.pdb_markup a:hover { cursor:pointer; }
   height:18px;
   border-top-left-radius: 6px;
   border-bottom-left-radius: 6px;
+  cursor:default;
 }
 .score_legend_right {
   border-top:1px solid #CCC;
@@ -99,13 +110,19 @@ table.pdb_markup a:hover { cursor:pointer; }
   cursor:pointer;
 }
 .viewer_btn:hover {
-  background-color: [[MAIN_V_DARK]];
+  background-color: [[MAIN_V_DARK]] !important;
   color: [[WHITE]];
 }
 .viewer_btn span {
   line-height:18px;
   vertical-align:top;
 }
+
+a.viewer_btn_link {
+  display:none;
+  color: [[WHITE]] !important;
+}
+
 
 .viewer_helper_btn:before { content: url(/i/16/help.png); }
 .viewer_reset_btn:before  { content: url(/i/16/rev/reload.png); }

@@ -59,9 +59,12 @@ sub content {
 
   return "No overlapping protein" unless ($msc && $msc->rank < 17);
 
+  my $rest_url = $hub->species_defs->ENSEMBL_REST_URL;
+
   my $html = qq{
   <input class="panel_type" value="PDB" type="hidden" />
-  
+  <input type="hidden" name="ensembl_rest_url" class="js_param" value="$rest_url">
+
   <!-- Complied & minified library css -->
   <link rel="stylesheet" href="//www.ebi.ac.uk/pdbe/pdb-component-library/v1.0/css/pdb.component.library.min-1.0.0.css" />
 
@@ -76,8 +79,13 @@ sub content {
   <script src="/pdbe/pdb.component.library.min-1.0.0.js"></script>
   <!--<script src="//www.ebi.ac.uk/~lgil/tests/3d/popup/litemol-custom-theme.js"></script>-->
   <!--<script src="http://ves-hx2-76.ebi.ac.uk:5060/pdbe/litemol-custom-theme.js"></script>-->
-  
-  <h2>Variant <span id="var_id">$var_id</span> <small>(<span id="msc_var"></span>)</small></h2>
+ 
+  <div> 
+    <h2 class="float_left">Variant <span id="var_id">$var_id</span> <small>(<span id="msc_var"></span>)</small></h2>
+    <a id="mapping_top_ensp" class="float_left viewer_btn viewer_btn_link left-margin _ht" title="Selected Ensembl protein"></a>
+    <a id="mapping_top_pdb" class="float_left viewer_btn viewer_btn_link left-margin _ht" target=_blank" style="background-color:#669966" title="Selected PDB model"></a>
+    <div style="clear:both"></div>
+  </div>
 
   <div id="pdb_msg"></div>  
 
@@ -144,7 +152,7 @@ sub content {
             <td id="mapping_block">
               <div>
                 <div>
-                  <h3 class="float_left" style="margin-bottom:0px">Ensembl-PDBe mapping</h3>
+                  <h3 class="float_left">Ensembl-PDBe mapping</h3>
                   <div class="float_right view_toggle view_toggle_btn open" rel="mapping_details"></div>
                   <div class="float_right pdb_feature_group view_enabled" title="Click to highlight / hide ENSP-PDB mapping coverage on the 3D viewer" id="mapping_group"></div>
                   <div style="clear:both"></div>
@@ -204,7 +212,7 @@ sub content {
             <td id="variant_block">
               <div>
                 <div>
-                  <h3 class="float_left" style="margin-bottom:0px">Variant $var_id</h3>
+                  <h3 class="float_left">Variant $var_id</h3>
                   <div class="float_right view_toggle view_toggle_btn open" rel="var_details"></div>
                   <div class="float_right pdb_feature_group view_enabled" title="Click to highlight / hide variant on the 3D viewer" id="variant_group"></div>
                   <div style="clear:both"></div>
