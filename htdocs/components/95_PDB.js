@@ -80,9 +80,11 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
 
     this.failed_get_ensp_length = {};
 
-    this.mapping_min_percent = 50
-    this.mapping_min_length  = 10;
-    this.max_pdb_entries     = 10;
+    this.max_feature_per_gp   = 150;
+    this.mapping_min_percent  = 50
+    this.mapping_min_length   = 10;
+    this.max_pdb_entries      = 10;
+    this.spinner_waiting_time = 20;
 
     this.pdb_id;
     this.pdb_start;
@@ -121,11 +123,22 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
           $.when(panel.get_ens_proteins_list(var_data)).then(function() {
             if (panel.ensp_list.length) {
               // Get ENSP(s) length(s) and Variant coordinates on the selected ENSP
-              $.when(panel.get_ens_protein_length(), panel.get_var_ensp_pos()).then(function() {
-console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
+              var var_rest_calls = [panel.get_ens_protein_length()];
+              $.each(panel.ensp_list, function(i,ensp) {
+                var_rest_calls.push(panel.get_var_ensp_pos(ensp));
+              });
+              // Waiting that the search of variant position for each ENSP has been done, using a list of promises,
+              // so it can run the rest of the process with all the data filed
+              $.when.apply(undefined, var_rest_calls).then(function(results){
+                console.log(">>>>> STEP 07: Get all Variant pos on ENSPs (get_all_var_ensp_pos) - done");
                 // Get the PDB list of each ENSP
                 panel.get_all_pdb_list();
               });
+/*              $.when(panel.get_ens_protein_length(), panel.get_all_var_ensp_pos()).then(function() {
+console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
+                // Get the PDB list of each ENSP
+                panel.get_all_pdb_list();
+              });*/
             }
             else {
               panel.showNoData();
@@ -137,16 +150,7 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
         $('#ensp_list').change(function () {
           panel.ensp_id = $(this).val();
           if (panel.ensp_id) {
-            if (!panel.ensp_var_pos[panel.ensp_id]) {
-              // Call method to get variant positon on protein
-              $.when(panel.get_var_ensp_pos()).then(function() {
-                $(".var_pos").html(panel.ensp_var_pos[panel.ensp_id]);
-              });
-            }
-            else {
-              $(".var_pos").html(panel.ensp_var_pos[panel.ensp_id]);
-            }
-            
+            $(".var_pos").html(panel.ensp_var_pos[panel.ensp_id]);           
             $("#var_ensp_id").html(panel.ensp_id);
             $("#variant_pos_info").show();
             panel.display_pdb_list(panel.ensp_id);
@@ -210,7 +214,7 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
           // Reset to default highlighting
           panel.selectedFeatureGroupsToHighlight();
           $('.view_spinner').hide();
-        }, 20);
+        }, panel.spinner_waiting_time);
       });
 
     });
@@ -264,11 +268,6 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
 
       // Assign position to variant
       if (panel.var_id) {
-        /*var max_interval_iteration = 50;
-        var interval_iteration_count = 0;
-        var ensp_var_pos_interval = setInterval(function(){
-          if (panel.ensp_var_pos[panel.ensp_id] || interval_iteration_count == max_interval_iteration) {*/
-
         // Position on ENSP
         var var_pos_ensp = panel.ensp_var_pos[panel.ensp_id].split('-');
         // Position on PDB
@@ -297,12 +296,7 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
         var_pos_ensp = (var_pos_ensp[0] == var_pos_ensp[1]) ? var_pos_ensp[0] : var_pos_ensp[0]+'-'+var_pos_ensp[1];
         $('#var_pos_ensp').html(var_pos_ensp);
 
-        console.log(">>>>> STEP 13a: Select PDB entry (selectPDBEntry) - ensp_var_pos ready");
-           /* clearInterval(ensp_var_pos_interval);
-            console.log(">>>>> STEP 13a: Select PDB entry (selectPDBEntry) - ensp_var_pos ready | iterations: "+interval_iteration_count);
-          }
-          interval_iteration_count ++;
-        }, 100);*/
+        console.log(">>>>> STEP 13a: Select PDB entry (selectPDBEntry) - variant setup done");
       }
       // DEBUG MSG
       else {
@@ -419,27 +413,42 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
 
     if (!id) {
       id = '_group';
-    } 
-    $('div[id$='+id+']').each(function() {
-      var gp_id = $(this).attr('id');
+    }
 
-      // Check if group already selected
-      var is_selected = $('#'+gp_id).hasClass('view_enabled');
-      var pdb_feature_entry_array = $('[data-group="'+gp_id+'"]');
+    var regex = /(sift|polyphen)/;
+    var waiting_time = 0;
+    if (regex.test(id)) {
+      $('.view_spinner').show();
+      waiting_time = panel.spinner_waiting_time;
+    }
 
-      // Update display of each item of the group
-      pdb_feature_entry_array.each(function() {
-        if (is_selected) {
-          $(this).switchClass('view_disabled','view_enabled');
-        }
-        else {
-          $(this).switchClass('view_enabled','view_disabled');
-        }
+    // Display spinner icon for long loading highlighting such as SIFT and PolyPhen
+    setTimeout(function(){
+      $('div[id$='+id+']').each(function() {
+        var gp_id = $(this).attr('id');
+
+        // Check if group already selected
+        var is_selected = $('#'+gp_id).hasClass('view_enabled');
+        var pdb_feature_entry_array = $('[data-group="'+gp_id+'"]');
+
+        // Update display of each item of the group
+        pdb_feature_entry_array.each(function() {
+          if (is_selected) {
+            $(this).switchClass('view_disabled','view_enabled');
+          }
+          else {
+            $(this).switchClass('view_enabled','view_disabled');
+          }
+        });
       });
-    });
 
-    // Highlight the selected items
-    panel.selectedFeaturesToHighlight();
+      // Highlight the selected items
+      panel.selectedFeaturesToHighlight();
+
+      if (regex.test(id)) {
+        $('.view_spinner').hide();
+      }
+    }, waiting_time);
   },
 
 
@@ -450,26 +459,41 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
     if (!id) {
       id = '_sg';
     }
-    $('div[id$='+id+']').each(function() {
-      var subgp_id = $(this).attr('id');
-      
-      // Check if sub-group already selected
-      var is_selected = $('#'+subgp_id).hasClass('view_enabled');
-      var pdb_feature_entry_array = $('[data-sg="'+subgp_id+'"]');
-    
-      // Update display of each item of the sub-group
-      pdb_feature_entry_array.each(function() {
-        if (is_selected) {
-          $(this).switchClass('view_disabled','view_enabled');
-        }
-        else {
-          $(this).switchClass('view_enabled','view_disabled');
-        }
-      });
-    });
 
-    // Highlight the selected items
-    panel.selectedFeaturesToHighlight();
+    var regex = /(sift|polyphen)/;
+    var waiting_time = 0;
+    if (regex.test(id)) {
+      $('.view_spinner').show();
+      waiting_time = panel.spinner_waiting_time;
+    }
+
+    // Display spinner icon for long loading highlighting such as SIFT and PolyPhen
+    setTimeout(function(){
+      $('div[id$='+id+']').each(function() {
+        var subgp_id = $(this).attr('id');
+      
+        // Check if sub-group already selected
+        var is_selected = $('#'+subgp_id).hasClass('view_enabled');
+        var pdb_feature_entry_array = $('[data-sg="'+subgp_id+'"]');
+    
+        // Update display of each item of the sub-group
+        pdb_feature_entry_array.each(function() {
+          if (is_selected) {
+            $(this).switchClass('view_disabled','view_enabled');
+          }
+          else {
+            $(this).switchClass('view_enabled','view_disabled');
+          }
+        });
+      });
+
+      // Highlight the selected items
+      panel.selectedFeaturesToHighlight();
+      
+      if (regex.test(id)) {
+        $('.view_spinner').hide();
+      }
+    }, waiting_time);
   },
 
 
@@ -562,6 +586,7 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
       // instead of "polymer-visual", "model" or any valid ref can be used: all "child" visuals will be colored.
       LiteMolPluginInstance.CustomTheme.applyTheme(panel.liteMolScope.LiteMolComponent.plugin, 'polymer-visual', theme);
     }
+    
     console.log("  >>> STEP 15a: Highlight selected features (selectedFeaturesToHighlight) - done");
   },
 
@@ -697,22 +722,29 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
     // so it can returns an error message if no mappings at all have been found
     $.when.apply(undefined, pdb_list_calls).then(function(results){ 
       $.each(panel.ensp_list, function(i,ensp) {
+console.log("//// ENSP: "+ensp+ "("+i+")");
         // Extract list of PDB IDs and fetch extra PDB information (through the PDBe REST API
         if (panel.protein_features[ensp]['pdb'] && panel.protein_features[ensp]['pdb'].length !=0) {
           panel.get_pdb_extra_data(ensp);
         }
         // Can't get PDB model for this ENSP
         else {
-          panel.ensp_pdb_list_fetch.push(ensp);
+          panel.no_pdb_list_available(ensp);
         }
       });      
 
-//console.log("ENSP List: "+panel.ensp_list.length+" | ENSP PDB Fetch: "+panel.ensp_pdb_list_fetch.length+" | ENSP-PDB list: "+Object.keys(panel.ensp_pdb_list).length);
+console.log("ENSP List: "+panel.ensp_list.length+" | ENSP PDB Fetch: "+panel.ensp_pdb_list_fetch.length+" | ENSP-PDB list: "+Object.keys(panel.ensp_pdb_list).length);
       if (panel.ensp_list.length == panel.ensp_pdb_list_fetch.length) {
         if (Object.keys(panel.ensp_pdb_list).length == 0) {
           panel.removeSpinner();
           var ensp_no_pdb = (panel.ensp_list.length > 1) ? ':<ul><li>'+panel.ensp_list.join('</li><li>')+'</li></ul>' : panel.ensp_list[0]+".";
-          panel.showNoData('No PDBe mapping found for the protein(s) '+ensp_no_pdb);
+          var var_pos = Object.keys(panel.ensp_var_pos).length;
+          if (var_pos) {
+            panel.showNoData('No PDBe mapping overlap this variant on the protein(s) '+ensp_no_pdb);
+          }
+          else {
+            panel.showNoData('No PDBe mapping found for the protein(s) '+ensp_no_pdb);
+          }
         }
       }
     });
@@ -726,18 +758,42 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
 
     // Extract the list of PDB IDs for the ENSP
     var pdb_list = []; 
+
+    var var_pos = panel.ensp_var_pos[ensp];
+
     $.each(panel.protein_features[ensp]['pdb'],function (index, result) {
       var pdb_acc = result.id.split('.');
       var pdb_id = pdb_acc[0];
+      
       if ($.inArray(pdb_id,pdb_list) == -1) {
-        pdb_list.push(pdb_id);
+        // If variant page, check that the PDB model(s) overlap the variant
+        var var_in_pdb = 0;
+        if (var_pos) {
+          var var_pos_list = var_pos.split('-');
+          if (var_pos_list[0] >= result.start && var_pos_list[1] <= result.end) {
+            var_in_pdb = 1;
+          }
+        }
+        if ((var_pos && var_in_pdb == 1) || !var_pos) {
+          pdb_list.push(pdb_id);
+        }
       }
     });
 
-    // Get quality score and PDB chain structure before generating the final list of PDB entries for this ENSP
-    $.when(panel.get_pdb_quality_score(ensp,pdb_list), panel.get_pdb_chain_struc_entity(pdb_list)).then(function() {
-      panel.parse_pdb_results(ensp);
-    });
+    if (pdb_list.length != 0) {
+      if (panel.ensp_id == undefined) {
+        panel.ensp_id = ensp;
+      }
+    console.log("COUNT PDB LIST for "+ensp+": "+pdb_list.length);
+      // Get quality score and PDB chain structure before generating the final list of PDB entries for this ENSP
+      $.when(panel.get_pdb_quality_score(ensp,pdb_list), panel.get_pdb_chain_struc_entity(pdb_list)).then(function() {
+        panel.parse_pdb_results(ensp);
+      });
+    }
+    // No PDB model
+    else {
+      panel.no_pdb_list_available(ensp);
+    }
   },
 
 
@@ -866,8 +922,6 @@ console.log('    - '+pdb_id+": "+pdb_results.overall_quality);
     var pdb_objs   = [];
     var pdb_struct_asym_list = new Object();
 
-    var var_pos = panel.ensp_var_pos[ensp];      
-
     var protein_features = panel.protein_features[ensp]['pdb'];
     
     $.each(protein_features,function (index, result) {
@@ -886,23 +940,15 @@ console.log('    - '+pdb_id+": "+pdb_results.overall_quality);
     $.each(protein_features,function (index, result) {
       var pdb_acc = result.id.split('.');
       var pdb_id = pdb_acc[0];
+      // Create object with PDB extra data
       if ($.inArray(pdb_id,pdb_list) == -1) {
-        var var_in_pdb = 0;
-        if (var_pos) {
-          var var_pos_list = var_pos.split('-');
-          if (var_pos_list[0] >= result.start && var_pos_list[1] <= result.end) {
-            var_in_pdb = 1;
-          }
-        }
-        if ((var_pos && var_in_pdb == 1) || !var_pos) {
-          var pdb_size = result.end - result.start + 1;
-          var chains = pdb_struct_asym_list[pdb_id].sort();
-          var pdb_quality = panel.ensp_pdb_quality_list[ensp][pdb_id];
-          pdb_objs.push(
-            {id: pdb_id, start: result.start, end: result.end, chain: chains, size: pdb_size, hit_start: result.hit_start, hit_end: result.hit_end, overall_quality: pdb_quality}
-          );
-          pdb_list.push(pdb_id);
-        }
+        var pdb_size = result.end - result.start + 1;
+        var chains = pdb_struct_asym_list[pdb_id].sort();
+        var pdb_quality = panel.ensp_pdb_quality_list[ensp][pdb_id];
+        pdb_objs.push(
+          {id: pdb_id, start: result.start, end: result.end, chain: chains, size: pdb_size, hit_start: result.hit_start, hit_end: result.hit_end, overall_quality: pdb_quality}
+        );
+        pdb_list.push(pdb_id);
       }
     });
 
@@ -915,6 +961,7 @@ console.log('    - '+pdb_id+": "+pdb_results.overall_quality);
       panel.ensp_pdb_list[ensp] = pdb_objs.slice(0, panel.max_pdb_entries);
 
       var ensp_option = { 'value' : ensp, 'text' : ensp };
+console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+pdb_objs.length );
       if (ensp == panel.ensp_id) {
         ensp_option['selected'] = 'selected';
         panel.display_pdb_list(ensp);
@@ -923,6 +970,20 @@ console.log('    - '+pdb_id+": "+pdb_results.overall_quality);
     }
     panel.ensp_pdb_list_fetch.push(ensp);
     console.log("  >>> STEP 11: Parse PDBs results (parse_pdb_results) - done");
+  },
+
+
+  // Method adding the ENSP to the list of reviewed ENSP
+  // Also reset the module ensp_id if no PDB model found for the ENSP 
+  // and there are more than 1 ENSP available
+  no_pdb_list_available: function(ensp) {
+    var panel = this;
+
+    // Reset panel.ensp_id if no PDB model found for the ENSP and there are more than 1 ENSP available
+    if (ensp == panel.ensp_id && panel.ensp_list.length > 1) {
+      panel.ensp_id = undefined;
+    }
+    panel.ensp_pdb_list_fetch.push(ensp);
   },
 
 
@@ -958,52 +1019,42 @@ console.log('    - '+pdb_id+": "+pdb_results.overall_quality);
       // The Ensembl REST call is made at the beginning of the script
       var counter = 0;
       $('#pdb_list').html('');
-/*      var i_length = setInterval(function(){
-        counter++;
-        if(counter === 20 || panel.ensp_length[ensp] != undefined || panel.failed_get_ensp_length[ensp]) {*/
-          // Add PDB models to the dropdomn list
-          $.each(pdb_objs, function (i, pdb_obj) {
-            var pdb_mapping_length = pdb_obj.end - pdb_obj.start + 1;
-            var ensp_pdb_percent  = (pdb_mapping_length/panel.ensp_length[ensp])*100;
-            var ensp_pdb_coverage = Math.round(ensp_pdb_percent);
 
-            // Limit to PDB models mapping to at list a certain percentage of the ENSP protein length
-            if (panel.mapping_min_percent <= ensp_pdb_coverage) {
-              var pdb_coord = " - Coverage: [ PDBe: "+pdb_obj.hit_start+'-'+pdb_obj.hit_end+" | ENSP: "+pdb_obj.start+"-"+pdb_obj.end+" ] => "+ensp_pdb_coverage+"% of ENSP length";
-              var pdb_option = {
-                     'value'         : pdb_obj.id,
-                     'data-start'    : pdb_obj.start,
-                     'data-end'      : pdb_obj.end,
-                     'data-hit-start': pdb_obj.hit_start,
-                     'data-chain'    : pdb_obj.chain,
-                     'text'          : pdb_obj.id + pdb_coord
-                  };
-              if (first_pdb_entry == 1 || pdb_objs_length == 1) {
-                pdb_option['selected'] = 'selected';
-                selected_pdb = pdb_obj.id;
-                first_pdb_entry = 0;
-              }
-              $('#pdb_list').append($('<option>', pdb_option));
-              show_pdb_list = 1;
-            }
-          });
+      // Add PDB models to the dropdomn list
+      $.each(pdb_objs, function (i, pdb_obj) {
+        var pdb_mapping_length = pdb_obj.end - pdb_obj.start + 1;
+        var ensp_pdb_percent  = (pdb_mapping_length/panel.ensp_length[ensp])*100;
+        var ensp_pdb_coverage = Math.round(ensp_pdb_percent);
 
-          if (show_pdb_list) {
-            $('#pdb_list_label').show();
-            $('#pdb_list').show();
-            panel.selectPDBEntry(selected_pdb);
+        // Limit to PDB models mapping to at list a certain percentage of the ENSP protein length
+        if (panel.mapping_min_percent <= ensp_pdb_coverage) {
+          var pdb_coord = " - Coverage: [ PDBe: "+pdb_obj.hit_start+'-'+pdb_obj.hit_end+" | ENSP: "+pdb_obj.start+"-"+pdb_obj.end+" ] => "+ensp_pdb_coverage+"% of ENSP length";
+          var pdb_option = {
+                 'value'         : pdb_obj.id,
+                 'data-start'    : pdb_obj.start,
+                 'data-end'      : pdb_obj.end,
+                 'data-hit-start': pdb_obj.hit_start,
+                 'data-chain'    : pdb_obj.chain,
+                 'text'          : pdb_obj.id + pdb_coord
+              };
+          if (first_pdb_entry == 1 || pdb_objs_length == 1) {
+            pdb_option['selected'] = 'selected';
+            selected_pdb = pdb_obj.id;
+            first_pdb_entry = 0;
           }
-          else {
-            panel.showNoData();
-          }
-
-  /*        if (counter === 20 && panel.ensp_length[ensp] == undefined) {
-            console.log("Fetching ENSP length through the REST API takes too long!");
-          }
-          console.log(">>>>> STEP 12: Display PDBe dropdown (display_pdb_list) - done");
-          clearInterval(i_length);
+          $('#pdb_list').append($('<option>', pdb_option));
+          show_pdb_list = 1;
         }
-      }, 100);*/
+      });
+
+      if (show_pdb_list) {
+        $('#pdb_list_label').show();
+        $('#pdb_list').show();
+        panel.selectPDBEntry(selected_pdb);
+      }
+      else {
+        panel.showNoData();
+      }
     }
     $('#ensp_pdb').show();
   },
@@ -1067,17 +1118,18 @@ console.log('    - '+pdb_id+": "+pdb_results.overall_quality);
 
 
   // Get variant position on ENSP
-  get_var_ensp_pos: function() {
+  get_var_ensp_pos: function(ensp) {
     var panel = this;
 
     return $.ajax({
-      url: panel.rest_pr_url+panel.ensp_id+'?feature=transcript_variation;type='+panel.var_cons,
+//      url: panel.rest_pr_url+ensp+'?feature=transcript_variation;type='+panel.var_cons,
+      url: panel.rest_pr_url+ensp+'?feature=transcript_variation',        
       method: "GET",
       contentType: "application/json; charset=utf-8"
     })
     .done(function (data) {
-      console.log(">>>>> STEP 06: Get Variant pos on ENSP (get_var_ensp_pos) - done");
-      panel.parse_tv_results(data,panel.ensp_id);
+      console.log("  >>> STEP 06a: Get Variant pos on "+ensp+" (get_var_ensp_pos) - done");
+      panel.parse_tv_results(data,ensp);
     })
     .fail(function (xhRequest, ErrorText, thrownError) {
       console.log('ErrorText: ' + ErrorText + "\n");
@@ -1096,7 +1148,7 @@ console.log('    - '+pdb_id+": "+pdb_results.overall_quality);
         }
       });
     }
-    console.log(">>>>> STEP 07: Parse Variant pos on ENSP (parse_tv_results) - done");
+    console.log("  >>> STEP 06b: Parse Variant pos on ENSP - '"+panel.ensp_var_pos[ensp]+"' (parse_tv_results) - done");
   },
 
 
@@ -1164,10 +1216,6 @@ console.log('    - '+pdb_id+": "+pdb_results.overall_quality);
       if (!panel.ensp_id) {
         panel.ensp_id = prot_list[0];
       }
-      //panel.get_ens_protein_length()
-      /*if (panel.var_id && !panel.ensp_var_pos[panel.ensp_id]) {
-        var result = panel.get_var_ensp_pos(panel.ensp_id);
-      }*/
     }
   },
 
