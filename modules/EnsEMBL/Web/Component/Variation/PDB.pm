@@ -81,7 +81,7 @@ sub content {
   <!--<script src="http://ves-hx2-76.ebi.ac.uk:5060/pdbe/litemol-custom-theme.js"></script>-->
  
   <div> 
-    <h2 class="float_left">Variant <span id="var_id">$var_id</span> <small>(<span id="msc_var"></span>)</small></h2>
+    <h2 class="float_left">Variant <span id="var_id">$var_id</span> <small><span id="var_cons"></span></small></h2>
     <a id="mapping_top_ensp" class="float_left viewer_btn viewer_btn_link left-margin _ht" title="Selected Ensembl protein"></a>
     <a id="mapping_top_pdb" class="float_left viewer_btn viewer_btn_link left-margin _ht" target=_blank" style="background-color:#669966" title="Selected PDB model"></a>
     <div style="clear:both"></div>

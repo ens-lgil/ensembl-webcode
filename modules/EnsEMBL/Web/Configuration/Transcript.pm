@@ -1,7 +1,7 @@
 =head1 LICENSE
 
 Copyright [1999-2015] Wellcome Trust Sanger Institute and the EMBL-European Bioinformatics Institute
-Copyright [2016-2018] EMBL-European Bioinformatics Institute
+Copyright [2016-2017] EMBL-European Bioinformatics Institute
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -91,6 +91,12 @@ sub populate_tree {
     [qw( protvars EnsEMBL::Web::Component::Transcript::ProteinVariations )],
     { 'availability' => 'either database:variation has_variations', 'concise' => 'Variants' }
   ));
+
+  $prot_menu->append($self->create_node('PDB', '3D Protein model [BETA]',
+    [qw( alignment EnsEMBL::Web::Component::Transcript::PDB  )],
+    { 'availability' => 'transcript translation','concise' => '3D Protein model (PDBe) - [BETA]'  }
+  ));
+
  
   my $var_menu = $self->create_submenu('Variation', 'Genetic Variation');
 
@@ -176,7 +182,6 @@ sub populate_tree {
     [qw( export EnsEMBL::Web::Component::Export::Output )],
     { 'availability' => 'transcript', 'no_menu_entry' => 1 }
   );
-
 }
 
 1;

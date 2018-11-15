@@ -61,12 +61,33 @@ sub availability {
       }
       $availability->{'is_somatic'}  = $obj->has_somatic_source;
       $availability->{'not_somatic'} = !$obj->has_somatic_source;
+      $availability->{'is_coding'}   = $self->is_coding_variant;
     }
     
     $self->{'_availability'} = $availability;
   }
   
   return $self->{'_availability'};
+}
+
+sub is_coding_variant {
+  my $self = shift;
+  my $rank;
+  if(my $vf_object = $self->get_selected_variation_feature) {
+    my $cons = $vf_object->most_severe_OverlapConsequence;
+    $rank = $cons->rank;
+  }
+  else {
+    my @vari_mappings = @{ $self->get_variation_features };
+    foreach my $f (@vari_mappings){
+      my $cons = $vf_object->most_severe_OverlapConsequence;
+      my $cons_rank = $cons->rank;
+      if (!$rank || $rank > $cons_rank) {
+        $rank = $cons_rank;
+      }
+    }
+  }
+  return ($rank < 18) ? 1 : 0;
 }
 
 sub counts {
@@ -1615,7 +1636,7 @@ sub hgvs_url {
       $p->{'lrgt'} = "${id}t$tr_pr_id";
     }
   } else {
-    if ($type eq 'g') { # genomic position
+    if (($type eq 'g') || ($type eq 'm')) { # genomic position
       $p->{'type'}             = 'Location';
       $p->{'action'}           = 'View';
       $p->{'contigviewbottom'} = $config_param;
@@ -1623,10 +1644,16 @@ sub hgvs_url {
       $p->{'type'}   = 'Transcript';
       $p->{'action'} = 'ProtVariations';
       $p->{'t'}      = $refseq.$version;
-    } else { # $type eq c: cDNA position, no $type: special cases where the variation falls in e.g. a pseudogene. Default to transcript
+    } elsif (($type eq 'n') || ($type eq 'c')) {
+      # transcript links only set for type 'n' or 'c'
+      # $type eq c: cDNA position 
+      # $type eq n: non-coding e.g. special cases where the variation falls in e.g. a pseudogene
       $p->{'type'}   = 'Transcript';
       $p->{'action'} = ($hub->species_defs->databases->{'DATABASE_VARIATION'} && $hub->species_defs->databases->{'DATABASE_VARIATION'}->{'#STRAINS'} > 0 ? 'Population' : 'Summary');
       $p->{'t'}      = $refseq.$version;
+    } else {
+      # Do not assign an url
+      return undef;
     }
   }
   
@@ -1763,6 +1790,60 @@ sub get_snpedia_data {
 
   # combine the pageid, the latest revision and the page title into one hash
   return { 'pageid'=>$pageid, %{ $rev }, 'desc'=>\@desc_arr, %{ $pageref } };
+}
+
+# Get the allele URI and genomic allele id (CAid) for a genomic HGVS
+# from the Allele Registry (http://reg.clinicalgenome.org) using API ver 1.01.xx
+#
+# Example:
+# GET: http://reg.test.genome.network/allele?hgvs=NC_000023.11:g.57448699T>C&fields=none+@id
+# {
+#   "@id": "http://reg.test.genome.network/allele/CA149611"
+# }
+sub get_allele_registry_data {
+  my ($self, $hgvsg) = @_;
+
+  my $hub = $self->hub;
+  my $allele_registry_url = $hub->get_ExtURL('ALLELE_REGISTRY');
+  return {} if (! $allele_registry_url);
+
+  my $endpoint = 'allele';
+
+  my $rest = EnsEMBL::Web::REST->new($hub, $allele_registry_url);
+  my $args= {
+    'url_params' => {
+      'hgvs' => $hgvsg,
+      'fields' => 'none+@id',
+      '_delimiter' => '&',
+    }
+  };
+
+  my ($ref, $error) = $rest->fetch($endpoint, $args);
+
+  if($error || ref $ref ne 'HASH') {
+    return {};
+  }
+  return {} if (! exists $ref->{'@id'});
+  my ($caid) = $ref->{'@id'} =~ m#/(CA\d+)$#;
+  return {} if (! $caid);
+  return {'caid' => $caid, 'caid_uri' => $ref->{'@id'}};
+}
+
+sub get_hgvsg {
+  my $self = shift;
+
+  # Pick out the correct variation feature
+  my $mappings      = $self->variation_feature_mapping;
+  my $mapping_count = scalar keys %$mappings;
+
+  # skip if no mapping or somatic mutation with mutation ref base different to ensembl ref base
+  return {} unless $mapping_count && !$self->is_somatic_with_different_ref_base;
+
+  my $vf = $self->get_selected_variation_feature;
+  return {} unless $vf;
+
+  my $hgvs = $vf->get_all_hgvs_notations();
+  return $hgvs;
 }
 
 1;

@@ -68,13 +68,13 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
     this.liteMolScope;
     
     this.var_id;
-    this.var_cons;
     this.ensp_id;
 
     this.ensp_list = [];
     this.ensp_pdb_list = {};
     this.ensp_pdb_quality_list = {};
     this.ensp_var_pos  = {};
+    this.ensp_var_cons = {};
     this.ensp_length   = {};
     this.ensp_pdb_list_fetch = [];
 
@@ -117,12 +117,12 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
       }
       // Variation portal
       else {
-        // Get variant information
+        // Get variant ID and fetch variant information
         $.when(panel.get_var_data()).then(function(var_data) {
           // Get the list of ENSP overlapping the variant
           $.when(panel.get_ens_proteins_list(var_data)).then(function() {
             if (panel.ensp_list.length) {
-              // Get ENSP(s) length(s) and Variant coordinates on the selected ENSP
+              // Get ENSP(s) length(s), variant coordinates and variant consequence on the selected ENSP
               var var_rest_calls = [panel.get_ens_protein_length()];
               $.each(panel.ensp_list, function(i,ensp) {
                 var_rest_calls.push(panel.get_var_ensp_pos(ensp));
@@ -150,16 +150,18 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
         $('#ensp_list').change(function () {
           panel.ensp_id = $(this).val();
           if (panel.ensp_id) {
-            $(".var_pos").html(panel.ensp_var_pos[panel.ensp_id]);           
-            $("#var_ensp_id").html(panel.ensp_id);
-            $("#variant_pos_info").show();
+            $('.var_pos').html(panel.ensp_var_pos[panel.ensp_id]);
+            $('#var_cons').html('('+panel.ensp_var_cons[panel.ensp_id]+')');
+            $('#var_ensp_id').html(panel.ensp_id);
+            $('#variant_pos_info').show();
             panel.display_pdb_list(panel.ensp_id);
           }
           // Reset the variant position display on the page
           else {
-            $(".var_pos").html('');
-            $("#var_ensp_id").html('');
-            $("#variant_pos_info").hide();
+            $('.var_pos').html('');
+            $('#var_cons').html('');
+            $('#var_ensp_id').html('');
+            $('#variant_pos_info').hide();
           }
         });
       }  
@@ -276,7 +278,8 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
         $('#'+panel.var_id+'_cb').attr('data-value', var_pdb_coords[0]+','+var_pdb_coords[1]);
 
         // Special display for the stop_gained variants
-        if (panel.var_cons && (panel.var_cons == 'stop_gained' || panel.var_cons == 'frameshift_variant')) {
+        var var_cons = panel.ensp_var_cons[panel.ensp_id];
+        if (var_cons && (var_cons == 'stop_gained' || var_cons == 'frameshift_variant')) {
           var var_pos_after_stop =  Number(var_pdb_coords[1]) + 1;
  
           var altered_sequence = '<tr>'+
@@ -317,7 +320,7 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
   
       // Load default highlighting
       // Set interval to check that the model loading is done before highlighting some features by default
-      var max_interval_iteration = 30;
+      /*var max_interval_iteration = 30;
       var interval_iteration_count = 0;
       var check_model_loaded = setInterval(function() {
         // Check if model is finished loaded in the LiteMol viewer
@@ -333,10 +336,7 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
           console.log(">>>>> STEP 14: Load 3D widget (load3DWidget) - done | iterations: "+interval_iteration_count);
         }
         interval_iteration_count ++;
-      }, 100);
-
- 
-      $('#litemol_buttons').show();
+      }, 100);*/
 
       // Load the right hand side menu
       if (panel.ensp_id) {
@@ -347,6 +347,31 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
         // SIFT and PolyPhen2
         panel.get_sift_polyphen_data(panel.ensp_id);
       }
+
+      // Wait for the loading of the model into the widget before starting to load the  default highlighting
+      LiteMol.Bootstrap.Event.Tree.NodeAdded.getStream(panel.liteMolScope.LiteMolComponent.plugin.context).subscribe(function (e) {
+
+        if(e.data.ref == "model"){
+
+          console.log(">>>>> STEP 14: Load 3D widget (selectPDBEntry) - done");
+        
+          // Set timeout because it needs a bit of extra time at the end of the model rendering and before starting the group highlighting  
+          var timeout = (panel.var_id) ? 0 : 200;          
+          setTimeout(function(){ panel.selectedFeatureGroupsToHighlight(); }, timeout);
+
+          $('#litemol_buttons').show();
+
+          /*// Load the right hand side menu
+          if (panel.ensp_id) {
+            // Exons
+            panel.get_exon_data(panel.ensp_id);
+            // Protein features
+            panel.get_protein_feature_data(panel.ensp_id);
+            // SIFT and PolyPhen2
+            panel.get_sift_polyphen_data(panel.ensp_id);
+          }*/
+        }
+      });
     }
     else {
       $('#litemol_buttons').hide();
@@ -737,7 +762,7 @@ console.log("ENSP List: "+panel.ensp_list.length+" | ENSP PDB Fetch: "+panel.ens
       if (panel.ensp_list.length == panel.ensp_pdb_list_fetch.length) {
         if (Object.keys(panel.ensp_pdb_list).length == 0) {
           panel.removeSpinner();
-          var ensp_no_pdb = (panel.ensp_list.length > 1) ? ':<ul><li>'+panel.ensp_list.join('</li><li>')+'</li></ul>' : panel.ensp_list[0]+".";
+          var ensp_no_pdb = (panel.ensp_list.length > 1) ? ':<ul class="top-margin bottom-margin"><li>'+panel.ensp_list.join('</li><li>')+'</li></ul>' : panel.ensp_list[0]+".";
           var var_pos = Object.keys(panel.ensp_var_pos).length;
           if (var_pos) {
             panel.showNoData('No PDBe mapping overlap this variant on the protein(s) '+ensp_no_pdb);
@@ -999,7 +1024,8 @@ console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+pdb_objs.length );
     else {
       if ($('.var_pos').length) {
         $('.var_pos').html(panel.ensp_var_pos[ensp]);
-        $("#var_ensp_id").html(ensp);
+        $('#var_cons').html('('+panel.ensp_var_cons[ensp]+')');
+        $('#var_ensp_id').html(ensp);
       }
 
       // Retrieve the list of PDB entries for this ENSP
@@ -1089,6 +1115,8 @@ console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+pdb_objs.length );
 
     $("#var_id").html(panel.var_id);
 
+    console.log(">>>>> STEP 01: Get Variant ID (get_var_data) - done");
+
     // Get most severe consequence
     return $.ajax({
       url: panel.rest_var_url+panel.var_id,
@@ -1096,9 +1124,7 @@ console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+pdb_objs.length );
       contentType: "application/json; charset=utf-8"
     })
     .done(function (data) {
-      console.log(">>>>> STEP 01: Get Variant data (get_var_data) - done");
-      // Variant data
-      panel.parse_var_results(data);
+      console.log(">>>>> STEP 02: Get Variant data (get_var_data) - done");
     })
     .fail(function (xhRequest, ErrorText, thrownError) {
       console.log('ErrorText: ' + ErrorText + "\n");
@@ -1107,14 +1133,14 @@ console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+pdb_objs.length );
   },
 
   // Parse results from the Ensembl REST call and display the data
-  parse_var_results: function(data) {
+  /*parse_var_results: function(data) {
     var panel = this;
     if (!data.error) {
       panel.var_cons = data.most_severe_consequence;
       $('#msc_var').html(panel.var_cons);
     }
     console.log(">>>>> STEP 02: Parse Variant data (parse_var_results) - done");
-  },
+  },*/
 
 
   // Get variant position on ENSP
@@ -1144,6 +1170,7 @@ console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+pdb_objs.length );
       $.each(data,function (index, result) {
         if (panel.var_id == result.id) {
           panel.ensp_var_pos[ensp] = result.start+'-'+result.end;
+          panel.ensp_var_cons[ensp] = result.type;
           return false;
         }
       });
