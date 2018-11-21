@@ -79,7 +79,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
     this.ensp_var_pos  = {};
     this.ensp_var_cons = {};
     this.ensp_length   = {};
-    this.ensp_pdb_list_fetch = [];
+//    this.ensp_pdb_list_fetch = [];
 
     this.failed_get_ensp_length = {};
 
@@ -139,11 +139,6 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
                 // Get the PDB list of each ENSP
                 panel.get_all_pdb_list();
               });
-/*              $.when(panel.get_ens_protein_length(), panel.get_all_var_ensp_pos()).then(function() {
-console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
-                // Get the PDB list of each ENSP
-                panel.get_all_pdb_list();
-              });*/
             }
             else {
               panel.showNoData();
@@ -686,10 +681,14 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
   },
 
 
+
   //------------//
   //  PDB data  //
   //------------//
 
+  // Method to fetch all the ENSP-PDB mappings from the Ensembl database and then:
+  // - Get extra PDB information (quality, chain, author coordinates)
+  // - Filter/sort the results and build PDB objects
   get_all_pdb_list: function() {
     var panel = this;
     console.log(">>>>> STEP 08: Get all the PDB lists (get_all_pdb_list) - start");
@@ -706,21 +705,54 @@ console.log("    # ENSP entries: "+panel.ensp_list.join(" | "));
 
     // Waiting that the search of PDB entries for each ENSP has been done, using a list of promises,
     // so it can returns an error message if no mappings at all have been found
-    $.when.apply(undefined, pdb_list_calls).then(function(results){ 
+    $.when.apply(undefined, pdb_list_calls).then(function(results){
+      var pdb_unique_list = []; 
       $.each(panel.ensp_list, function(i,ensp) {
-console.log("//// ENSP: "+ensp+ "("+i+")");
-        // Extract list of PDB IDs and fetch extra PDB information (through the PDBe REST API
+        // Extract list of PDB IDs and fetch extra PDB information (through the PDBe REST API)
         if (panel.protein_features[ensp]['pdb'] && panel.protein_features[ensp]['pdb'].length !=0) {
-          panel.get_pdb_extra_data(ensp);
+          var var_pos = panel.ensp_var_pos[ensp];          
+
+          $.each(panel.protein_features[ensp]['pdb'],function (index, result) {
+            var pdb_acc = result.id.split('.');
+            var pdb_id = pdb_acc[0];
+
+            if ($.inArray(pdb_id,pdb_unique_list) == -1) {
+              // If variant page, check that the PDB model(s) overlap the variant
+              var var_in_pdb = 0;
+              if (var_pos) {
+                var var_pos_list = var_pos.split('-');
+                if (var_pos_list[0] >= result.start && var_pos_list[1] <= result.end) {
+                  var_in_pdb = 1;
+                }
+              }
+              if ((var_pos && var_in_pdb == 1) || !var_pos) {
+                // Setup ensp_id if none has been assigned
+                if (panel.ensp_id == undefined) {
+                   panel.ensp_id = ensp;
+                }
+                // Add PDB model to the list;
+                pdb_unique_list.push(pdb_id);     
+              }
+            }
+          });
         }
         // Can't get PDB model for this ENSP
         else {
           panel.no_pdb_list_available(ensp);
         }
-      });      
+      });
 
-console.log("ENSP List: "+panel.ensp_list.length+" | ENSP PDB Fetch: "+panel.ensp_pdb_list_fetch.length+" | ENSP-PDB list: "+Object.keys(panel.ensp_pdb_list).length);
-      if (panel.ensp_list.length == panel.ensp_pdb_list_fetch.length) {
+      // Add additional information for each PDB model
+      if (pdb_unique_list.length > 0) {
+        panel.get_pdb_extra_data(pdb_unique_list);
+      }
+      else {
+        panel.no_mapping_available();
+      }
+
+//console.log("ENSP List: "+panel.ensp_list.length+" | ENSP PDB Fetch: "+panel.ensp_pdb_list_fetch.length+" | ENSP-PDB list: "+Object.keys(panel.ensp_pdb_list).length);
+
+      /*if (panel.ensp_list.length == panel.ensp_pdb_list_fetch.length) {
         if (Object.keys(panel.ensp_pdb_list).length == 0) {
           panel.removeSpinner();
           var ensp_no_pdb = (panel.ensp_list.length > 1) ? ':<ul class="top-margin bottom-margin"><li>'+panel.ensp_list.join('</li><li>')+'</li></ul>' : panel.ensp_list[0]+".";
@@ -732,72 +764,55 @@ console.log("ENSP List: "+panel.ensp_list.length+" | ENSP PDB Fetch: "+panel.ens
             panel.showNoData('No PDBe mapping found for the protein(s) '+ensp_no_pdb);
           }
         }
-      }
+      }*/
     });
   },
 
 
-  // Extract the list of mapped PDB model for a given ENSP
+  // Extract the list of mapped PDB model for all the ENSP
   // and then fetch extra information about these PDB models (through the PDB REST API)
-  get_pdb_extra_data: function(ensp) {
+  get_pdb_extra_data: function(pdb_list) {
     var panel = this;
 
-    // Extract the list of PDB IDs for the ENSP
-    var pdb_list = []; 
+    console.log("COUNT PDB LIST : "+pdb_list.length);
 
-    var var_pos = panel.ensp_var_pos[ensp];
+    // Get quality score and PDB chain structure before generating the final list of PDB entries for this ENSP
+    $.when(panel.get_pdb_quality_score(pdb_list), panel.get_pdb_chain_struc_entity(pdb_list)).then(function() {
+//        if (Object.keys(panel.pdb_chain_struc_entity).length != 0) {
+        // Will store the list of PDB AJAX calls to get the author position of each PDB model
+        var list_pdb_ensp_for_author_pos = [];
 
-    $.each(panel.protein_features[ensp]['pdb'],function (index, result) {
-      var pdb_acc = result.id.split('.');
-      var pdb_id = pdb_acc[0];
-      
-      if ($.inArray(pdb_id,pdb_list) == -1) {
-        // If variant page, check that the PDB model(s) overlap the variant
-        var var_in_pdb = 0;
-        if (var_pos) {
-          var var_pos_list = var_pos.split('-');
-          if (var_pos_list[0] >= result.start && var_pos_list[1] <= result.end) {
-            var_in_pdb = 1;
-          }
-        }
-        if ((var_pos && var_in_pdb == 1) || !var_pos) {
-          pdb_list.push(pdb_id);
-        }
-      }
-    });
-
-    if (pdb_list.length != 0) {
-      if (panel.ensp_id == undefined) {
-        panel.ensp_id = ensp;
-      }
-    console.log("COUNT PDB LIST for "+ensp+": "+pdb_list.length);
-      // Get quality score and PDB chain structure before generating the final list of PDB entries for this ENSP
-      $.when(panel.get_pdb_quality_score(ensp,pdb_list), panel.get_pdb_chain_struc_entity(pdb_list)).then(function() {
-        if (Object.keys(panel.pdb_chain_struc_entity).length != 0) {
+        $.each(panel.ensp_list, function(index, ensp) {
+          // Build PDB objects and reduce the number of PDB models if the list is too long (e.g. > 10 PDB models per ENSP)
           panel.parse_pdb_results(ensp);
 
-          // Extract the list of PDB IDs with chain information
+          // Extract the list of PDB IDs with chain information in order to fetch each PDB model's author coordinates
           var pdb_list_author_pos = [];
+          if (panel.ensp_pdb_list[ensp]) {
+            // Generate the list of AJAX calls to get the author position for each PDB
+            $.each(panel.ensp_pdb_list[ensp],function(index, pdb_entry) {
+              if(panel.pdb_chain_struc_entity[pdb_entry.id]) {
+                list_pdb_ensp_for_author_pos.push(pdb_entry.id+'#'+ensp);
+              }
+            });
+          }
+        });
 
-          // Get the author position for each PDB
-          $.each(panel.ensp_pdb_list[ensp],function(index, pdb_entry) {
-console.log("##### "+pdb_entry.id+" in list #####");
-            if(panel.pdb_chain_struc_entity[pdb_entry.id]) {
-              pdb_list_author_pos.push(panel.get_pdb_author_pos(pdb_entry.id,ensp));
-            }
-          });
+        // Will store the list of PDB AJAX calls to get the author position of each PDB model
+        var pdb_list_author_pos = [];
+        $.each(list_pdb_ensp_for_author_pos, function(index,pdb_ensp) {
+          [pdb_id,ensp_id] = pdb_ensp.split('#');
+//console.log("##### "+pdb_id+" # "+ensp_id+" #####");
+          pdb_list_author_pos.push(panel.get_pdb_author_pos(pdb_id,ensp_id)); 
+        });
 
-          // Create objects with PDB extra data
-          $.when.apply(undefined,pdb_list_author_pos).then(function(results){
-            panel.finish_parse_pdb_results(ensp);
-          });
-        }
+        // Waiting that the PDB author positions are fetched for each PDB model, using a list of promises,
+        // and then it finalise the list of PDB models for the given ENSP
+        $.when.apply(undefined,pdb_list_author_pos).then(function(results){
+          console.log("  >>> STEP 10c: PDB author coordinates (get_pdb_author_pos) - done");
+          panel.finish_parse_pdb_results();
+        });
       });
-    }
-    // No PDB model
-    else {
-      panel.no_pdb_list_available(ensp);
-    }
   },
 
 
@@ -848,7 +863,7 @@ console.log("##### "+pdb_entry.id+" in list #####");
   },
 
   // Get the quality score of each PDB model, through the PDBe REST API
-  get_pdb_quality_score: function(ensp,pdb_list) {
+  get_pdb_quality_score: function(pdb_list) {
     var panel = this;
 
     return $.ajax({
@@ -860,11 +875,8 @@ console.log("##### "+pdb_entry.id+" in list #####");
     .done(function (pdb_data) {
       // Store each PDB model quality score
       $.each(pdb_data,function (pdb_id, pdb_results) {
-console.log('    - '+pdb_id+": "+pdb_results.overall_quality);
-        if (!panel.ensp_pdb_quality_list[ensp]) {
-          panel.ensp_pdb_quality_list[ensp] = {};
-        }
-        panel.ensp_pdb_quality_list[ensp][pdb_id] = pdb_results.overall_quality;
+        panel.ensp_pdb_quality_list[pdb_id] = pdb_results.overall_quality;
+console.log('    - '+pdb_id+": "+panel.ensp_pdb_quality_list[pdb_id]);
       })
       console.log("  >>> STEP 10a: Get PDB quality (get_pdb_quality_score) - done");
     })
@@ -928,7 +940,6 @@ console.log('    - '+pdb_id+": "+pdb_results.overall_quality);
     var panel = this;
 
     var chain;
-
     $.each(panel.ensp_pdb_list[ensp], function(index,pdb_entry) {
       if (pdb_entry.id == pdb_id) {
         chain = pdb_entry.chain[0];
@@ -937,7 +948,8 @@ console.log('    - '+pdb_id+": "+pdb_results.overall_quality);
     });
 
     var entity_id = panel.pdb_chain_struc_entity[pdb_id][chain]['entity_id'];
-console.log("get_pdb_author_pos "+pdb_id+": "+chain+" | "+entity_id);
+//console.log("get_pdb_author_pos "+pdb_id+": "+chain+" | "+entity_id);
+
     return $.ajax({
       url: panel.rest_pdbe_sifts_url+pdb_id,
       method: "GET"
@@ -948,12 +960,13 @@ console.log("get_pdb_author_pos "+pdb_id+": "+chain+" | "+entity_id);
       var mapped_gene = 0;
       var author_start;
       var author_end;
+      // Browse into the JSON output
       $.each(data[pdb_id].Ensembl, function (index, ens_gene) {
         $.each(ens_gene.mappings, function(index2, pdb_mapping) {
-//console.log("[[ "+pdb_mapping.translation_id+"| ENSP: "+ensp+" ]]");
+          // Only look at the entries corresponding to the given ENSP data
           if (pdb_mapping.translation_id == ensp) {
             mapped_gene = 1;
-//console.log("[[[ "+pdb_mapping.chain_id+" | "+pdb_mapping.entity_id+" ]]]");
+            // Check that we are looking at the right data (entity_id and chain_id)
             if (pdb_mapping.entity_id == entity_id && pdb_mapping.chain_id == chain) {
               var tmp_author_start = (pdb_mapping.start.author_residue_number) ? pdb_mapping.start.author_residue_number : 1;
               var tmp_author_end   = (pdb_mapping.end.author_residue_number)   ? pdb_mapping.end.author_residue_number   : pdb_mapping.end.residue_number;
@@ -965,21 +978,23 @@ console.log("get_pdb_author_pos "+pdb_id+": "+chain+" | "+entity_id);
               }
             }
           }
-          /*else {
-            return false;
-          }*/
         });
+        // No need to look at other genes
         if (mapped_gene == 1) {
           return false;
         }
       });
-      if (!panel.ensp_pdb_author_pos[pdb_id]) {
-        panel.ensp_pdb_author_pos[pdb_id] = {};
+      
+      // Add the coordinates to the array
+      if (author_start && author_end) {
+        if (!panel.ensp_pdb_author_pos[ensp]) {
+          panel.ensp_pdb_author_pos[ensp] = { pdb_id: {} };
+        }
+        panel.ensp_pdb_author_pos[ensp][pdb_id] = { 'start': author_start, 'end': author_end };
       }
-      panel.ensp_pdb_author_pos[pdb_id] = { 'start': author_start, 'end': author_end };
 //console.log("AUTHOR for "+pdb_id+" - "+ensp+": "+author_start+"-"+author_end);
 
-      console.log("  >>> STEP 10c: PDB author coordinates for "+pdb_id+": "+author_start+"-"+author_end+" (get_pdb_author_pos) - done");
+//      console.log("  >>> STEP 10c: PDB author coordinates for "+pdb_id+": "+author_start+"-"+author_end+" (get_pdb_author_pos) - done");
     })
     .fail(function (xhRequest, ErrorText, thrownError) {
       console.log('ErrorText: ' + ErrorText + "\n");
@@ -999,7 +1014,11 @@ console.log("get_pdb_author_pos "+pdb_id+": "+chain+" | "+entity_id);
     var pdb_struct_asym_list = new Object();
 
     var protein_features = panel.protein_features[ensp]['pdb'];
-    
+   
+    // Generate a distinct list of chains reported in the Ensembl REST for each PDB entry mapped to the givem ENSP
+    // The entries can be duplicated for the PDB models composed of several chains, e.g. for 1BMO:
+    // 1bmo.A, 1bmo.B => pdb_struct_asym_list['1bmo'] = ['A','B']
+    //
     $.each(protein_features,function (index, result) {
       var pdb_acc = result.id.split('.');
       var pdb_id = pdb_acc[0];
@@ -1019,23 +1038,22 @@ console.log("get_pdb_author_pos "+pdb_id+": "+chain+" | "+entity_id);
       // Create object with PDB extra data
       if ($.inArray(pdb_id,pdb_list) == -1) {
         var pdb_size = result.end - result.start + 1;
-        var chains = pdb_struct_asym_list[pdb_id].sort();
-        var pdb_quality = panel.ensp_pdb_quality_list[ensp][pdb_id];
 
-console.log("CREATE PDB OBJECT FOR "+pdb_id+" | "+chains.join(','));
-//// Show an example /////  
+        // Build a PDB object
+        // Example for the mapping ENSP00000231061 - 1BMO:
+        // { id: "1bmo", start: 71, end: 303, chain: ['A','B'], size: 233, hit_start: 1, hit_end: 233, author_start: 54, author_end: 286, overall_quality: 9.64 }
         pdb_objs.push(
           { 
             id: pdb_id, 
             start: result.start, 
             end: result.end, 
-            chain: chains, 
+            chain: pdb_struct_asym_list[pdb_id].sort(), 
             size: pdb_size, 
             hit_start: result.hit_start, 
             hit_end: result.hit_end,
             author_start: undefined,
             author_end: undefined,
-            overall_quality: panel.ensp_pdb_quality_list[ensp][pdb_id]
+            overall_quality: panel.ensp_pdb_quality_list[pdb_id]
           }
         );
         pdb_list.push(pdb_id);
@@ -1049,47 +1067,77 @@ console.log("CREATE PDB OBJECT FOR "+pdb_id+" | "+chains.join(','));
       });
       // Only get the best models (see max_pdb_entries)
       panel.ensp_pdb_list[ensp] = pdb_objs.slice(0, panel.max_pdb_entries);
+console.log('ENSP count: '+Object.keys(panel.ensp_pdb_list).length);
     }
   },
 
 
-  // Add the PDB author position, the ENSP selection and display its corresponding PDB list
-  finish_parse_pdb_results: function(ensp) {
+  // Finish the list of PDB list to display:
+  // - Add the PDB author position
+  // - Remove PDB model from list if the length of the author PDB coordinates differs from the PDB curator length
+  // - Add the ENSP selection and display its corresponding PDB list
+  finish_parse_pdb_results: function() {
     var panel = this;
  
-    var pdb_entry_to_remove = [];
-    // Add the PDB author coordinates and remove the PDB entry having a different length between
-    // the PDB author and the PDB curator
-    $.each(panel.ensp_pdb_list[ensp],function(index, pdb_entry) {
-
-      var ensp_length = pdb_entry.end-pdb_entry.start;
-      var pdb_length  = pdb_entry.hit_end-pdb_entry.hit_start;
-      var author_pdb_length = panel.ensp_pdb_author_pos[pdb_entry.id]['end'] - panel.ensp_pdb_author_pos[pdb_entry.id]['start'];
+    var count_ensp_with_pdb_list = 0;
+console.log('ENSP count: '+Object.keys(panel.ensp_pdb_list).length);
+    $.each(panel.ensp_pdb_list, function(ensp, pdb_entries) {
+      var pdb_entry_to_remove = [];
+      // Add the PDB author coordinates and remove the PDB entry having a different length between
+      // the PDB author and the PDB curator
+      $.each(pdb_entries, function(index, pdb_entry) {
+console.log(ensp+" / "+pdb_entry.id);
+//console.log(panel.ensp_pdb_author_pos[ensp][pdb_entry.id]);
+        if (panel.ensp_pdb_author_pos[ensp]) {
+          var ensp_length = pdb_entry.end-pdb_entry.start;
+          var pdb_length  = pdb_entry.hit_end-pdb_entry.hit_start;
+          var author_pdb_length = panel.ensp_pdb_author_pos[ensp][pdb_entry.id]['end'] - panel.ensp_pdb_author_pos[ensp][pdb_entry.id]['start'];
 console.log(pdb_entry.id+": "+author_pdb_length+" | "+pdb_length+" | "+ensp_length);
-      if (pdb_length == author_pdb_length) { 
-        pdb_entry.author_start = panel.ensp_pdb_author_pos[pdb_entry.id]['start'];
-        pdb_entry.author_end   = panel.ensp_pdb_author_pos[pdb_entry.id]['end'];
+          // Add the author coordinates if the author and curator length match.
+          if (pdb_length == author_pdb_length) { 
+            pdb_entry.author_start = panel.ensp_pdb_author_pos[ensp][pdb_entry.id]['start'];
+            pdb_entry.author_end   = panel.ensp_pdb_author_pos[ensp][pdb_entry.id]['end'];
+          }
+          else {
+            // Add PDB entry to the list of PDB model to remove
+            pdb_entry_to_remove.push(pdb_entry);
+          }
+        }
+        else {
+          // Add PDB entry to the list of PDB model to remove
+          pdb_entry_to_remove.push(pdb_entry);
+        }
+      });
+      // Remove the PDB model(s) from the list
+      if (pdb_entry_to_remove.length) {
+        $.each(pdb_entry_to_remove, function(index2, pdb_entry) {
+          console.log("Entry "+pdb_entry.id+" removed");
+          panel.ensp_pdb_list[ensp].splice( $.inArray(pdb_entry,panel.ensp_pdb_list[ensp]) ,1);
+        });
       }
+
+      // Display ENSP entry in the ENSP selection dropdown if there are some PDB models to display
+      if (Object.keys(panel.ensp_pdb_list[ensp]).length > 0) {
+        var ensp_option = { 'value' : ensp, 'text' : ensp };
+console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+ Object.keys(panel.ensp_pdb_list[ensp]).length );
+        if (ensp == panel.ensp_id) {
+          ensp_option['selected'] = 'selected';
+          // Display the list of PDB entries in the selection dropdown
+          panel.display_pdb_list(ensp);
+        }
+        $('#ensp_list').append($('<option>', ensp_option));
+//        panel.ensp_pdb_list_fetch.push(ensp);
+        count_ensp_with_pdb_list ++;
+      }
+      // No PDB model
       else {
-        pdb_entry_to_remove.push(pdb_entry);
+        panel.no_pdb_list_available(ensp);
       }
     });
-    if (pdb_entry_to_remove.length) {
-      $.each(pdb_entry_to_remove, function(index2, pdb_entry) {
-        console.log("Entry "+pdb_entry.id+" removed");
-        panel.ensp_pdb_list[ensp].splice( $.inArray(pdb_entry,panel.ensp_pdb_list[ensp]) ,1);
-      });
-    }
 
-    var ensp_option = { 'value' : ensp, 'text' : ensp };
-console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+ Object.keys(panel.ensp_pdb_list[ensp]).length );
-    if (ensp == panel.ensp_id) {
-      ensp_option['selected'] = 'selected';
-      panel.display_pdb_list(ensp);
+    if (count_ensp_with_pdb_list == 0) {
+      panel.no_mapping_available();
     }
-    $('#ensp_list').append($('<option>', ensp_option));
-  
-    panel.ensp_pdb_list_fetch.push(ensp);
     console.log("  >>> STEP 11: Finish parse PDBs results (finish_parse_pdb_results) - done");
   },
 
@@ -1104,9 +1152,25 @@ console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+ Object.keys(panel.ens
     if (ensp == panel.ensp_id && panel.ensp_list.length > 1) {
       panel.ensp_id = undefined;
     }
-    panel.ensp_pdb_list_fetch.push(ensp);
+//    panel.ensp_pdb_list_fetch.push(ensp);
   },
 
+
+  // Method displaying an error message when no ENSP-PDB mappings have been found/retained
+  no_mapping_available: function() {
+    var panel = this;
+
+    panel.removeSpinner();
+    var ensp_no_pdb = (panel.ensp_list.length > 1) ? ':<ul class="top-margin bottom-margin"><li>'+panel.ensp_list.join('</li><li>')+'</li></ul>' : panel.ensp_list[0]+".";
+    var var_pos = Object.keys(panel.ensp_var_pos).length;
+    if (var_pos) {
+      panel.showNoData('No PDBe mapping overlap this variant on the protein(s) '+ensp_no_pdb);
+    }
+    else {
+      panel.showNoData('No PDBe mapping found for the protein(s) '+ensp_no_pdb);
+    }
+    console.log(">>>>> STEP 99: No ENSP-PDB mappings found/retained (no_mapping_available)");
+  },
 
   // Display the dropdown selector for the PDB models
   display_pdb_list: function(ensp) {
@@ -1187,7 +1251,9 @@ console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+ Object.keys(panel.ens
     }
     $('#ensp_pdb').show();
   },
-  
+ 
+
+ 
   //----------------// 
   //  Ensembl data  //
   //----------------//
@@ -1374,6 +1440,7 @@ console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+ Object.keys(panel.ens
         });
       });
   },
+
 
   
   //------------------------------------//
@@ -1867,8 +1934,6 @@ console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+ Object.keys(panel.ens
 
   
 
-
-
   //-----------------------//
   //  Colouration methods  //
   //-----------------------//
@@ -1909,6 +1974,7 @@ console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+ Object.keys(panel.ens
       panel.hexa_to_rgb[hexa] = {r:r_colour, g:g_colour, b:b_colour};
     }
   },
+
 
 
   //-------------------//
