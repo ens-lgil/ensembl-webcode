@@ -79,9 +79,6 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
     this.ensp_var_pos  = {};
     this.ensp_var_cons = {};
     this.ensp_length   = {};
-//    this.ensp_pdb_list_fetch = [];
-
-    this.failed_get_ensp_length = {};
 
     this.max_feature_per_gp   = 150;
     this.mapping_min_percent  = 50
@@ -153,7 +150,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
             $('.var_pos').html(panel.ensp_var_pos[panel.ensp_id]);
             $('#var_cons').html('('+panel.ensp_var_cons[panel.ensp_id]+')');
             $('#var_ensp_id').html(panel.ensp_id);
-            $('#variant_pos_info').show();
+            //$('#variant_pos_info').show();
             panel.display_pdb_list(panel.ensp_id);
           }
           // Reset the variant position display on the page
@@ -208,17 +205,14 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
         $('.view_spinner').show();
         // Needed to show the spinner
         setTimeout(function(){ 
+          // Reset to default view (like the "Reset" button in the viewer) - Code from LiteMol
+          panel.liteMolScope.LiteMolComponent.Bootstrap.Command.Visual.ResetScene.dispatch(panel.liteMolScope.LiteMolComponent.plugin.context, void 0);
           // Reset right hand menu
           panel.setDefaultHighlighting();
-          // Reset to default view (like the "Reset" button in the viewer)
-          // Code from LiteMol
-          panel.liteMolScope.LiteMolComponent.Bootstrap.Command.Visual.ResetScene.dispatch(panel.liteMolScope.LiteMolComponent.plugin.context, void 0);
           // Reset to default highlighting
           panel.selectedFeatureGroupsToHighlight();
-          $('.view_spinner').hide();
         }, panel.spinner_waiting_time);
       });
-
     });
   },
 
@@ -343,7 +337,20 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
           console.log(">>>>> STEP 14: Load 3D widget (selectPDBEntry) - done");
         
           // Set timeout because it needs a bit of extra time at the end of the model rendering and before starting the group highlighting
-          var timeout = (panel.var_id) ? 0 : (panel.pdb_end-panel.pdb_start > 800 ? 400 : 200);
+          var timeout = 0 ;
+          if (!panel.var_id) {
+            var pdb_size = panel.pdb_end-panel.pdb_start+1;
+            if (pdb_size > 800) {
+              timeout = 800;
+            }
+            else if (pdb_size < 100) {
+              timeout = 100;
+            }
+            else {
+              timeout = Math.round(pdb_size / 10) * 10;
+            }
+          }
+          console.log("TIMEOUT: "+timeout);
           setTimeout(function(){ panel.selectedFeatureGroupsToHighlight(); }, timeout);
 
           $('#litemol_buttons').show();
@@ -426,7 +433,7 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
       // Highlight the selected items
       panel.selectedFeaturesToHighlight();
 
-      if (regex.test(id)) {
+      if ($('.view_spinner').is(":visible")) {
         $('.view_spinner').hide();
       }
     }, waiting_time);
@@ -696,12 +703,20 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
     $('#pdb_list').hide();
     $('#right_form').addClass('loader_small');
 
-    var pdb_list_calls = [];
-
+    var pdb_list_calls    = [];
+    var ensp_list_cleaned = [];
     // Get the list of mapped PDB entries for each ENSP (from Ensembl 'protein_features' DB table, throught the REST API)
     $.each(panel.ensp_list, function(i,ensp) {
-      pdb_list_calls.push(panel.get_pdb_by_ensp(ensp));
+      if ((panel.var_id && panel.ensp_var_pos[ensp]) || !panel.var_id) {    
+        pdb_list_calls.push(panel.get_pdb_by_ensp(ensp));
+        ensp_list_cleaned.push(ensp);
+      }
     });
+
+    // Remove the Ensembl proteins which don't overlap the variant (if we are on a variant page)
+    if (panel.ensp_list.length != ensp_list_cleaned.length) {
+      panel.ensp_list = ensp_list_cleaned;
+    }
 
     // Waiting that the search of PDB entries for each ENSP has been done, using a list of promises,
     // so it can returns an error message if no mappings at all have been found
@@ -746,25 +761,10 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
       if (pdb_unique_list.length > 0) {
         panel.get_pdb_extra_data(pdb_unique_list);
       }
+      // No PDB mapping retained
       else {
         panel.no_mapping_available();
       }
-
-//console.log("ENSP List: "+panel.ensp_list.length+" | ENSP PDB Fetch: "+panel.ensp_pdb_list_fetch.length+" | ENSP-PDB list: "+Object.keys(panel.ensp_pdb_list).length);
-
-      /*if (panel.ensp_list.length == panel.ensp_pdb_list_fetch.length) {
-        if (Object.keys(panel.ensp_pdb_list).length == 0) {
-          panel.removeSpinner();
-          var ensp_no_pdb = (panel.ensp_list.length > 1) ? ':<ul class="top-margin bottom-margin"><li>'+panel.ensp_list.join('</li><li>')+'</li></ul>' : panel.ensp_list[0]+".";
-          var var_pos = Object.keys(panel.ensp_var_pos).length;
-          if (var_pos) {
-            panel.showNoData('No PDBe mapping overlap this variant on the protein(s) '+ensp_no_pdb);
-          }
-          else {
-            panel.showNoData('No PDBe mapping found for the protein(s) '+ensp_no_pdb);
-          }
-        }
-      }*/
     });
   },
 
@@ -808,10 +808,17 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
 
         // Waiting that the PDB author positions are fetched for each PDB model, using a list of promises,
         // and then it finalise the list of PDB models for the given ENSP
-        $.when.apply(undefined,pdb_list_author_pos).then(function(results){
-          console.log("  >>> STEP 10c: PDB author coordinates (get_pdb_author_pos) - done");
-          panel.finish_parse_pdb_results();
-        });
+        $.when.apply(undefined,pdb_list_author_pos).then(
+          // Success
+          function(){
+            console.log("  >>> STEP 10c: PDB author coordinates (get_pdb_author_pos) - done");
+            panel.finish_parse_pdb_results();
+          },
+          // Error
+          function(){
+            panel.no_mapping_available();            
+          }
+        );
       });
   },
 
@@ -1018,7 +1025,6 @@ console.log('    - '+pdb_id+": "+panel.ensp_pdb_quality_list[pdb_id]);
     // Generate a distinct list of chains reported in the Ensembl REST for each PDB entry mapped to the givem ENSP
     // The entries can be duplicated for the PDB models composed of several chains, e.g. for 1BMO:
     // 1bmo.A, 1bmo.B => pdb_struct_asym_list['1bmo'] = ['A','B']
-    //
     $.each(protein_features,function (index, result) {
       var pdb_acc = result.id.split('.');
       var pdb_id = pdb_acc[0];
@@ -1067,7 +1073,7 @@ console.log('    - '+pdb_id+": "+panel.ensp_pdb_quality_list[pdb_id]);
       });
       // Only get the best models (see max_pdb_entries)
       panel.ensp_pdb_list[ensp] = pdb_objs.slice(0, panel.max_pdb_entries);
-console.log('ENSP count: '+Object.keys(panel.ensp_pdb_list).length);
+//console.log('ENSP count: '+Object.keys(panel.ensp_pdb_list).length);
     }
   },
 
@@ -1085,26 +1091,28 @@ console.log('ENSP count: '+Object.keys(panel.ensp_pdb_list).length);
       var pdb_entry_to_remove = [];
       // Add the PDB author coordinates and remove the PDB entry having a different length between
       // the PDB author and the PDB curator
+      // At the moment we are quite strict on it, just to be on a safe side that the 3D model - PDB entry - ENSP mappings make sense
       $.each(pdb_entries, function(index, pdb_entry) {
-console.log(ensp+" / "+pdb_entry.id);
+        var is_coord_ok = 0;
+//console.log(ensp+" / "+pdb_entry.id);
 //console.log(panel.ensp_pdb_author_pos[ensp][pdb_entry.id]);
         if (panel.ensp_pdb_author_pos[ensp]) {
           var ensp_length = pdb_entry.end-pdb_entry.start;
           var pdb_length  = pdb_entry.hit_end-pdb_entry.hit_start;
-          var author_pdb_length = panel.ensp_pdb_author_pos[ensp][pdb_entry.id]['end'] - panel.ensp_pdb_author_pos[ensp][pdb_entry.id]['start'];
+          // Check that the author coordinates have been fetched
+          if (panel.ensp_pdb_author_pos[ensp][pdb_entry.id]) {
+            var author_pdb_length = panel.ensp_pdb_author_pos[ensp][pdb_entry.id]['end'] - panel.ensp_pdb_author_pos[ensp][pdb_entry.id]['start'];
 console.log(pdb_entry.id+": "+author_pdb_length+" | "+pdb_length+" | "+ensp_length);
-          // Add the author coordinates if the author and curator length match.
-          if (pdb_length == author_pdb_length) { 
-            pdb_entry.author_start = panel.ensp_pdb_author_pos[ensp][pdb_entry.id]['start'];
-            pdb_entry.author_end   = panel.ensp_pdb_author_pos[ensp][pdb_entry.id]['end'];
-          }
-          else {
-            // Add PDB entry to the list of PDB model to remove
-            pdb_entry_to_remove.push(pdb_entry);
+            // Add the author coordinates if the author and curator length match.
+            if (pdb_length == author_pdb_length) {
+              pdb_entry.author_start = panel.ensp_pdb_author_pos[ensp][pdb_entry.id]['start'];
+              pdb_entry.author_end   = panel.ensp_pdb_author_pos[ensp][pdb_entry.id]['end'];
+              is_coord_ok = 1;
+            }
           }
         }
-        else {
-          // Add PDB entry to the list of PDB model to remove
+        // Add PDB entry to the list of PDB model to remove
+        if (is_coord_ok == 0) {
           pdb_entry_to_remove.push(pdb_entry);
         }
       });
@@ -1119,7 +1127,7 @@ console.log(pdb_entry.id+": "+author_pdb_length+" | "+pdb_length+" | "+ensp_leng
       // Display ENSP entry in the ENSP selection dropdown if there are some PDB models to display
       if (Object.keys(panel.ensp_pdb_list[ensp]).length > 0) {
         var ensp_option = { 'value' : ensp, 'text' : ensp };
-console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+ Object.keys(panel.ensp_pdb_list[ensp]).length );
+//console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+ Object.keys(panel.ensp_pdb_list[ensp]).length );
         if (ensp == panel.ensp_id) {
           ensp_option['selected'] = 'selected';
           // Display the list of PDB entries in the selection dropdown
@@ -1152,7 +1160,6 @@ console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+ Object.keys(panel.ens
     if (ensp == panel.ensp_id && panel.ensp_list.length > 1) {
       panel.ensp_id = undefined;
     }
-//    panel.ensp_pdb_list_fetch.push(ensp);
   },
 
 
@@ -1164,10 +1171,10 @@ console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+ Object.keys(panel.ens
     var ensp_no_pdb = (panel.ensp_list.length > 1) ? ':<ul class="top-margin bottom-margin"><li>'+panel.ensp_list.join('</li><li>')+'</li></ul>' : panel.ensp_list[0]+".";
     var var_pos = Object.keys(panel.ensp_var_pos).length;
     if (var_pos) {
-      panel.showNoData('No PDBe mapping overlap this variant on the protein(s) '+ensp_no_pdb);
+      panel.showNoData('No PDB models overlapping this variant on the following protein(s) have been found/selected '+ensp_no_pdb);
     }
     else {
-      panel.showNoData('No PDBe mapping found for the protein(s) '+ensp_no_pdb);
+      panel.showNoData('No PDB models mappings have been found/selected for the  protein(s) '+ensp_no_pdb);
     }
     console.log(">>>>> STEP 99: No ENSP-PDB mappings found/retained (no_mapping_available)");
   },
@@ -1213,7 +1220,7 @@ console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+ Object.keys(panel.ens
         var ensp_pdb_coverage = Math.round(ensp_pdb_percent);
 
         // Limit to PDB models mapping to at list a certain percentage of the ENSP protein length
-        if (panel.mapping_min_percent <= ensp_pdb_coverage) {
+//        if (panel.mapping_min_percent <= ensp_pdb_coverage) {
           var pdb_coord = " - Coverage: [ PDBe author: "+pdb_obj.author_start+"-"+pdb_obj.author_end+" | PDBe: "+pdb_obj.hit_start+'-'+pdb_obj.hit_end+" | ENSP: "+pdb_obj.start+"-"+pdb_obj.end+" ] => "+ensp_pdb_coverage+"% of ENSP length";
           var pdb_option = {
                  'value'         : pdb_obj.id,
@@ -1221,7 +1228,8 @@ console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+ Object.keys(panel.ens
                  'data-end'      : pdb_obj.end,
                  'data-hit-start': pdb_obj.hit_start,
                  'data-chain'    : pdb_obj.chain,
-                 'text'          : pdb_obj.id + pdb_coord
+//                 'text'          : pdb_obj.id + pdb_coord
+                 'text'          : ensp+" - "+pdb_obj.id + pdb_coord
               };
           if ((pdb_obj.hit_start != pdb_obj.author_start || pdb_obj.hit_end != pdb_obj.author_end) && (pdb_obj.author_start && pdb_obj.author_end)) {
             pdb_option['data-author-start'] = pdb_obj.author_start;
@@ -1237,7 +1245,7 @@ console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+ Object.keys(panel.ens
           }
           $('#pdb_list').append($('<option>', pdb_option));
           show_pdb_list = 1;
-        }
+//        }
       });
 
       if (show_pdb_list) {
@@ -1435,9 +1443,6 @@ console.log("PDB data for "+ensp+" / "+panel.ensp_id+": "+ Object.keys(panel.ens
       .fail(function (xhRequest, ErrorText, thrownError) {
         console.log('ErrorText: ' + ErrorText + "\n");
         console.log('thrownError: ' + thrownError + "\n");
-        $.each(ensp_list, function(i, ensp) {
-          panel.failed_get_ensp_length[ensp] = 1;
-        });
       });
   },
 
