@@ -31,8 +31,6 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
     // Check if we can get the REST URL from the webiste
     this.rest_url_root         = this.params['ensembl_rest_url'];
     this.rest_vep_url          = this.rest_url_root+'/vep/'+this.species+'/id/';
-    this.rest_var_url          = this.rest_url_root+'/variation/'+this.species+'/';
-    this.rest_overlap_url      = this.rest_url_root+'/overlap/region/'+this.species+'/';
     this.rest_pr_url           = this.rest_url_root+'/overlap/translation/';
     this.rest_lookup_url       = this.rest_url_root+'/lookup/id/';
     this.pdbe_url_root         = this.params['pdbe_rest_url'];
@@ -674,7 +672,6 @@ Ensembl.Panel.PDB = Ensembl.Panel.Content.extend({
     var ensp_list_cleaned = [];
     // Get the list of mapped PDB entries for each ENSP (from Ensembl 'protein_features' DB table, throught the REST API)
     $.each(panel.ensp_list, function(i,ensp) {
-console.log(panel.var_id+ " | "+panel.ensp_var_pos[ensp]);
       if ((panel.var_id && panel.ensp_var_pos[ensp]) || !panel.var_id) {    
         pdb_list_calls.push(panel.get_pdb_by_ensp(ensp));
         ensp_list_cleaned.push(ensp);
@@ -849,8 +846,8 @@ console.log(panel.var_id+ " | "+panel.ensp_var_pos[ensp]);
     .done(function (pdb_data) {
       // Store each PDB model quality score
       $.each(pdb_data,function (pdb_id, pdb_results) {
-        panel.ensp_pdb_quality_list[pdb_id] = pdb_results.overall_quality;
-console.log('    - '+pdb_id+": "+panel.ensp_pdb_quality_list[pdb_id]);
+          panel.ensp_pdb_quality_list[pdb_id] = pdb_results.overall_quality;
+  console.log('    > Quality for '+pdb_id+": "+panel.ensp_pdb_quality_list[pdb_id]);
       })
       console.log("  >>> STEP 08a: Get PDB quality (get_pdb_quality_score) - done");
     })
@@ -953,11 +950,9 @@ console.log('    - '+pdb_id+": "+panel.ensp_pdb_quality_list[pdb_id]);
               // Flag the entries with undefined author start and/or end
               if (tmp_author_start == undefined) {
                 has_undef_author_start = 1;
-console.log(pdb_id+": has_undef_author_start");
               }
               if (tmp_author_end == undefined) {
                 has_undef_author_end = 1;
-console.log(pdb_id+": has_undef_author_end");
               }
 
               if (residue_start == undefined || tmp_start < residue_start) {
@@ -979,7 +974,6 @@ console.log(pdb_id+": has_undef_author_end");
       
       // Add the coordinates to the array if we have enough information
       if (author_start && author_end && (has_undef_author_start == 0 || has_undef_author_end == 0)) {
-console.log("Author for "+pdb_id+": "+author_start+" | "+author_end);
         if (!panel.ensp_pdb_author_pos[ensp]) {
           panel.ensp_pdb_author_pos[ensp] = { pdb_id: {} };
         }
@@ -1101,7 +1095,7 @@ console.log("Author for "+pdb_id+": "+author_start+" | "+author_end);
       // Remove the PDB model(s) from the list
       if (pdb_entry_to_remove.length) {
         $.each(pdb_entry_to_remove, function(index2, pdb_entry) {
-          console.log("Entry "+pdb_entry.id+" removed from the list");
+          console.log("    > Entry "+pdb_entry.id+" removed from the list");
           panel.ensp_pdb_list[ensp].splice( $.inArray(pdb_entry,panel.ensp_pdb_list[ensp]) ,1);
         });
       }
@@ -1416,6 +1410,15 @@ console.log("Author for "+pdb_id+": "+author_start+" | "+author_end);
         if (exon_number == data_size) {
           exon_end--;
         }
+        
+        // Start the exon with the beginning of the ENSP mapping
+        if (exon_start < panel.pdb_start && exon_end > panel.pdb_start) {
+          exon_start = panel.pdb_start;
+        }
+        // End the exon with the ending of the ENSP mapping
+        if (exon_end > panel.pdb_end && exon_start < panel.pdb_end) {
+          exon_end = panel.pdb_end;
+        }
 
         var exon_pdb_coords = panel.ensp_to_pdb_coords(exon_start,exon_end);
         if (exon_pdb_coords.length == 0) {
@@ -1456,11 +1459,16 @@ console.log("Author for "+pdb_id+": "+author_start+" | "+author_end);
   get_protein_feature_data: function(ensp_id) {
     var panel = this;
 
+    var has_data = 0;
     $.each(panel.protein_sources, function(type, url) {
       if (panel.protein_features[ensp_id][type]) {
         panel.parse_protein_feature_results(panel.protein_features[ensp_id][type],type);
+        has_data = 1;
       }
     });
+    if (has_data == 0) {
+      $("#protein_block").html("<div>No protein annotation found</div>");
+    }
     console.log("  >>> STEP 13b: Get Proteins feature (get_protein_feature_data) - done");
   },
   // Parse AJAX results for the overlapping protein data (except PDB) and display them on the right hand side menu  
